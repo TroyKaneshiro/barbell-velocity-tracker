@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import uuid
 from pathlib import Path
 
@@ -148,18 +149,22 @@ async def analyze(
         # ── Velocity ─────────────────────────────────────────────────
         vel = calculate_velocity(tracking, plate_diameter_m=plate_diameter_m)
 
-        # ── Annotate debug video with velocity + phase overlay ────────
-        _annotate_debug_video(debug_avi, vel)
-
-        # ── Convert debug video to browser-playable mp4 ──────────────
-        debug_filename = _convert_to_mp4(DEBUG_DIR, debug_filename)
-
         # ── RPE lookup ───────────────────────────────────────────────
         mcv        = vel["mean_concentric_velocity"]
         rpe_result = velocity_to_rpe(lift_type, mcv)
         rm_result  = projected_1rm(lift_type, mcv, bar_weight) if bar_weight else None
 
-        _prune_debug_videos(DEBUG_DIR, keep=5, latest=debug_filename)
+        # ── Debug video: annotate + convert in background ─────────────
+        # The mp4 filename is deterministic so the client can poll/load it
+        # once it appears; results are returned immediately without waiting.
+        mp4_filename = debug_filename.replace(".avi", ".mp4")
+
+        def _process_debug():
+            _annotate_debug_video(debug_avi, vel)
+            _convert_to_mp4(DEBUG_DIR, debug_filename)
+            _prune_debug_videos(DEBUG_DIR, keep=5, latest=mp4_filename)
+
+        threading.Thread(target=_process_debug, daemon=True).start()
 
         return {
             "lift_type":                 lift_type,
@@ -171,7 +176,7 @@ async def analyze(
             "rm_note":                   rm_result["note"]           if rm_result else None,
             "mean_concentric_velocity":  mcv,
             "peak_concentric_velocity":  vel["peak_concentric_velocity"],
-            "debug_video_url":           f"/debug/{debug_filename}",
+            "debug_video_url":           f"/debug/{mp4_filename}",
             # chart data
             "time":                      vel["time"],
             "velocity":                  vel["velocity"],

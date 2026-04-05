@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 # ── CSRT re-init on failure ───────────────────────────────────────────────────
-MAX_CSRT_FAILURES  = 5     # consecutive failures before re-init from last good bbox
+MAX_CSRT_FAILURES  = 5     # consecutive failures before re-init
+MAX_FRAME_JUMP     = 2.0   # bbox centre may not move more than this × plate_r per frame
 # ── Localised Hough around click ─────────────────────────────────────────────
 CLICK_SEARCH_FACTOR = 0.20  # search region half-size = this × min(frame_w, frame_h)
 MIN_EDGE_RATIO      = 0.18
@@ -221,6 +222,15 @@ class BarTracker:
                     bx, by, bw, bh = [int(v) for v in bbox]
                     cx_new = bx + bw / 2.0
                     cy_new = by + bh / 2.0
+
+                    # Reject if bbox centre jumped too far — CSRT drifted to wrong target
+                    prev = positions[-1] if positions else None
+                    if prev is not None:
+                        jump = ((cx_new - prev[0]) ** 2 + (cy_new - prev[1]) ** 2) ** 0.5
+                        if jump > MAX_FRAME_JUMP * plate_r:
+                            ok = False
+
+                if ok:
                     positions.append((cx_new, cy_new))
                     last_good_bbox   = (bx, by, bw, bh)
                     consecutive_fail = 0
@@ -228,10 +238,10 @@ class BarTracker:
                     consecutive_fail += 1
                     positions.append(None)
 
-                    # Re-init CSRT from last good bbox after repeated failures
+                    # Re-init CSRT from the original seed bbox so it snaps back to the plate
                     if consecutive_fail >= MAX_CSRT_FAILURES:
                         tracker = cv2.TrackerCSRT_create()
-                        tracker.init(frame, last_good_bbox)
+                        tracker.init(frame, init_bbox)
                         consecutive_fail = 0
                         print(f"[tracker] CSRT re-init at frame {frame_idx}")
 

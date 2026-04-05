@@ -14,7 +14,7 @@ Pipeline:
 """
 
 import numpy as np
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, find_peaks
 
 from tracker import TrackingResult
 
@@ -46,15 +46,32 @@ def _smooth(arr: np.ndarray, polyorder: int = 3) -> np.ndarray:
 
 def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, int, int]:
     """
-    Use position to find rep phases robustly.
+    Use position to find rep phases robustly, targeting the LAST rep.
 
-    The bottom of the rep is the global position minimum — the natural
-    boundary between eccentric (descent) and concentric (ascent).
+    For multi-rep sets, the last rep is closest to failure and most relevant
+    for RPE estimation. We find all local minima (rep bottoms) with sufficient
+    prominence and use the last one.
 
     Returns (eccentric_start, bottom_idx, concentric_end).
     """
     n = len(position)
-    bottom_idx = int(np.argmin(position))
+
+    # Find all local minima in position (each rep's bottom).
+    # Prominence threshold = 10% of total position range to ignore noise.
+    pos_range   = float(position.max() - position.min())
+    min_prom    = max(pos_range * 0.10, 0.01)
+    # Minimum distance between bottoms: at least 0.5s worth of frames,
+    # inferred from array length (assume caller smoothed reasonably).
+    min_dist    = max(10, n // 20)
+
+    bottoms, _ = find_peaks(-position, prominence=min_prom, distance=min_dist)
+
+    if len(bottoms) > 0:
+        bottom_idx = int(bottoms[-1])   # last rep
+        print(f"[velocity] detected {len(bottoms)} rep(s) — using last bottom at idx {bottom_idx}")
+    else:
+        bottom_idx = int(np.argmin(position))   # fallback: global min
+        print(f"[velocity] no distinct reps detected — using global minimum at idx {bottom_idx}")
 
     # Eccentric start: walk left from bottom until we find MIN_PHASE_FRAMES
     # consecutive frames that are essentially static (bar still in setup).
@@ -161,9 +178,19 @@ def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFA
     burst_local = np.where(in_burst)[0]
     if len(burst_local) > 0:
         burst_start = int(best_start + burst_local[0])
-        burst_end   = int(best_start + burst_local[-1]) + 1
-        burst       = velocity[burst_start:burst_end]
-        burst       = burst[burst > 0]
+
+        # Use the first CONTINUOUS block above threshold only.
+        # Oscillation after lockout creates a gap (velocity drops below threshold),
+        # then re-crosses it — stopping at the first gap excludes those pulses.
+        burst_end_local = burst_local[0]
+        for k in range(1, len(burst_local)):
+            if burst_local[k] > burst_local[k - 1] + 1:
+                break   # first gap = end of intentional drive
+            burst_end_local = burst_local[k]
+        burst_end = int(best_start + burst_end_local) + 1
+
+        burst = velocity[burst_start:burst_end]
+        burst = burst[burst > 0]
     else:
         burst_start = best_start
         burst_end   = best_end

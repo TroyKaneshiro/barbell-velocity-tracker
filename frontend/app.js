@@ -330,16 +330,34 @@ function showResults(data) {
 
   drawChart(data);
 
-  // Debug video
+  // Debug video — conversion runs in background; poll until the file is ready
   if (data.debug_video_url) {
+    debugCard.style.display = '';
     debugVideo.innerHTML = '';
     debugVideo.removeAttribute('src');
-    const src = document.createElement('source');
-    src.src  = data.debug_video_url + '?t=' + Date.now();
-    src.type = data.debug_video_url.endsWith('.mp4') ? 'video/mp4' : 'video/x-msvideo';
-    debugVideo.appendChild(src);
-    debugVideo.load();
-    debugCard.style.display = '';
+
+    const pollInterval = 1500;  // ms between attempts
+    const maxAttempts  = 40;    // ~60s total
+    let   attempts     = 0;
+
+    function tryLoadDebugVideo() {
+      const url = data.debug_video_url + '?t=' + Date.now();
+      fetch(url, { method: 'HEAD' })
+        .then((r) => {
+          if (r.ok) {
+            debugVideo.innerHTML = '';
+            const src = document.createElement('source');
+            src.src  = url;
+            src.type = 'video/mp4';
+            debugVideo.appendChild(src);
+            debugVideo.load();
+          } else if (++attempts < maxAttempts) {
+            setTimeout(tryLoadDebugVideo, pollInterval);
+          }
+        })
+        .catch(() => { if (++attempts < maxAttempts) setTimeout(tryLoadDebugVideo, pollInterval); });
+    }
+    tryLoadDebugVideo();
   }
 
   results.classList.remove('hidden');
