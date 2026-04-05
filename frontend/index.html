@@ -57,6 +57,16 @@
           </div>
         </div>
 
+        <!-- Click-to-select plate -->
+        <div class="click-wrap hidden" id="clickWrap">
+          <p class="hint" style="margin-bottom:.5rem">Click on the <strong>weight plate</strong> in the frame below to identify it, then press Analyze.</p>
+          <div class="video-click-container" id="videoClickContainer">
+            <video id="previewVideo" preload="metadata" style="width:100%;display:block;border-radius:8px;background:#000"></video>
+            <canvas id="clickCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;border-radius:8px"></canvas>
+          </div>
+          <p class="hint" id="clickStatus" style="margin-top:.4rem">No plate selected</p>
+        </div>
+
         <button class="btn-primary" id="analyzeBtn" disabled>Analyze</button>
 
         <!-- progress -->
@@ -112,11 +122,22 @@
           <canvas id="velocityChart"></canvas>
         </div>
 
+        <div class="card debug-card" id="debugCard" style="display:none">
+          <h2 class="chart-title">Tracker Debug Video</h2>
+          <p class="hint" style="margin-bottom:.75rem">
+            Green circle = plate &nbsp;·&nbsp;
+            <span style="color:#ff8240">Orange dot</span> = top edge &nbsp;·&nbsp;
+            <span style="color:#6495ed">Blue dot</span> = bottom edge &nbsp;·&nbsp;
+            "interp" = interpolated frame
+          </p>
+          <video id="debugVideo" controls style="width:100%;border-radius:8px;background:#000"></video>
+        </div>
+
       </section>
 
     </main>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2"></script>
 </body>
 </html>

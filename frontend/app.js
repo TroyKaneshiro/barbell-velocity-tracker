@@ -1,21 +1,28 @@
 'use strict';
 
 // ── Element refs ────────────────────────────────────────────────
-const dropZone     = document.getElementById('dropZone');
-const fileInput    = document.getElementById('fileInput');
-const browseBtn    = document.getElementById('browseBtn');
-const dropContent  = document.getElementById('dropContent');
-const fileChosen   = document.getElementById('fileChosen');
-const fileNameEl   = document.getElementById('fileName');
-const clearFileBtn = document.getElementById('clearFile');
-const analyzeBtn   = document.getElementById('analyzeBtn');
-const progressWrap = document.getElementById('progressWrap');
-const progressLabel= document.getElementById('progressLabel');
-const errorBox     = document.getElementById('errorBox');
-const errorMsg     = document.getElementById('errorMsg');
-const results      = document.getElementById('results');
+const dropZone          = document.getElementById('dropZone');
+const fileInput         = document.getElementById('fileInput');
+const browseBtn         = document.getElementById('browseBtn');
+const dropContent       = document.getElementById('dropContent');
+const fileChosen        = document.getElementById('fileChosen');
+const fileNameEl        = document.getElementById('fileName');
+const clearFileBtn      = document.getElementById('clearFile');
+const analyzeBtn        = document.getElementById('analyzeBtn');
+const progressWrap      = document.getElementById('progressWrap');
+const progressLabel     = document.getElementById('progressLabel');
+const errorBox          = document.getElementById('errorBox');
+const errorMsg          = document.getElementById('errorMsg');
+const results           = document.getElementById('results');
+const clickWrap         = document.getElementById('clickWrap');
+const previewVideo      = document.getElementById('previewVideo');
+const clickCanvas       = document.getElementById('clickCanvas');
+const clickStatus       = document.getElementById('clickStatus');
 
 const plateSelect = document.getElementById('plateSelect');
+
+// ── Click state ─────────────────────────────────────────────────
+let plateClick = null;   // { normX, normY } in 0-1 coords
 
 // Result fields
 const rpeValue  = document.getElementById('rpeValue');
@@ -26,6 +33,8 @@ const peakValue = document.getElementById('peakValue');
 const liftValue = document.getElementById('liftValue');
 const plateValue= document.getElementById('plateValue');
 const calibValue= document.getElementById('calibValue');
+const debugCard  = document.getElementById('debugCard');
+const debugVideo = document.getElementById('debugVideo');
 
 // ── Populate plate dropdown from backend ─────────────────────────
 fetch('/plates')
@@ -72,15 +81,73 @@ function setFile(file) {
   fileNameEl.textContent = file.name;
   dropContent.classList.add('hidden');
   fileChosen.classList.remove('hidden');
-  analyzeBtn.disabled = false;
   hideError();
+
+  // Show preview and ask user to click the plate
+  plateClick = null;
+  clickStatus.textContent = 'No plate selected';
+  analyzeBtn.disabled = true;
+  previewVideo.src = URL.createObjectURL(file);
+  previewVideo.currentTime = 0;
+  clickWrap.classList.remove('hidden');
+
+  // Size canvas to match video once metadata loads
+  previewVideo.addEventListener('loadedmetadata', syncCanvas, { once: true });
 }
+
+function syncCanvas() {
+  clickCanvas.width  = previewVideo.videoWidth;
+  clickCanvas.height = previewVideo.videoHeight;
+  redrawCanvas();
+}
+
+function redrawCanvas() {
+  const ctx = clickCanvas.getContext('2d');
+  ctx.clearRect(0, 0, clickCanvas.width, clickCanvas.height);
+  if (!plateClick) return;
+
+  const x = plateClick.normX * clickCanvas.width;
+  const y = plateClick.normY * clickCanvas.height;
+  const r = Math.min(clickCanvas.width, clickCanvas.height) * 0.04;
+
+  ctx.strokeStyle = '#43d982';
+  ctx.lineWidth   = Math.max(2, r * 0.15);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Crosshair
+  ctx.beginPath();
+  ctx.moveTo(x - r * 1.5, y); ctx.lineTo(x + r * 1.5, y);
+  ctx.moveTo(x, y - r * 1.5); ctx.lineTo(x, y + r * 1.5);
+  ctx.stroke();
+}
+
+clickCanvas.addEventListener('click', (e) => {
+  const rect   = clickCanvas.getBoundingClientRect();
+  const scaleX = clickCanvas.width  / rect.width;
+  const scaleY = clickCanvas.height / rect.height;
+  const px     = (e.clientX - rect.left)  * scaleX;
+  const py     = (e.clientY - rect.top)   * scaleY;
+
+  plateClick = {
+    normX: px / clickCanvas.width,
+    normY: py / clickCanvas.height,
+  };
+
+  clickStatus.textContent = `Plate selected at (${(plateClick.normX * 100).toFixed(1)}%, ${(plateClick.normY * 100).toFixed(1)}%) — click again to reposition`;
+  analyzeBtn.disabled = false;
+  redrawCanvas();
+});
 
 function clearFile() {
   selectedFile = null;
+  plateClick   = null;
   fileInput.value = '';
   dropContent.classList.remove('hidden');
   fileChosen.classList.add('hidden');
+  clickWrap.classList.add('hidden');
+  previewVideo.src = '';
   analyzeBtn.disabled = true;
   hideError();
 }
@@ -97,17 +164,29 @@ analyzeBtn.addEventListener('click', () => {
   progressLabel.textContent = 'Tracking bar & computing velocity…';
   analyzeBtn.disabled = true;
 
+  if (!plateClick) {
+    progressWrap.classList.add('hidden');
+    analyzeBtn.disabled = false;
+    showError('Please click on the weight plate in the preview first.');
+    return;
+  }
+
   const formData = new FormData();
   formData.append('video', selectedFile);
   formData.append('lift_type', liftType);
   formData.append('plate', plateSelect.value);
+  formData.append('click_x', plateClick.normX);
+  formData.append('click_y', plateClick.normY);
 
   fetch('/analyze', { method: 'POST', body: formData })
     .then((res) =>
       res.text().then((text) => {
+        if (!res.ok) {
+          // Show the raw server response so we can see exactly what failed
+          throw new Error(`Server ${res.status}: ${text}`);
+        }
         let body;
-        try { body = JSON.parse(text); } catch { body = { detail: text }; }
-        if (!res.ok) throw new Error(body.detail || `Server error ${res.status}`);
+        try { body = JSON.parse(text); } catch { throw new Error(text); }
         return body;
       })
     )
@@ -138,6 +217,18 @@ function showResults(data) {
   calibValue.textContent = `${data.calibration.fps.toFixed(0)} fps · ${data.calibration.m_per_px.toFixed(4)} m/px`;
 
   drawChart(data);
+
+  // Debug video
+  if (data.debug_video_url) {
+    debugVideo.innerHTML = '';
+    debugVideo.removeAttribute('src');
+    const src = document.createElement('source');
+    src.src  = data.debug_video_url + '?t=' + Date.now();
+    src.type = data.debug_video_url.endsWith('.mp4') ? 'video/mp4' : 'video/x-msvideo';
+    debugVideo.appendChild(src);
+    debugVideo.load();
+    debugCard.style.display = '';
+  }
 
   results.classList.remove('hidden');
   results.scrollIntoView({ behavior: 'smooth', block: 'start' });

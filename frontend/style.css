@@ -181,6 +181,14 @@ body {
 }
 .file-chosen button:hover { color: var(--accent2); }
 
+/* ── Click-to-select plate ──────────────────────────────────────── */
+.video-click-container {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000;
+}
+
 /* ── Primary button ────────────────────────────────────────────── */
 .btn-primary {
   width: 100%;
