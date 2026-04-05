@@ -56,18 +56,24 @@ def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, i
     """
     n = len(position)
 
-    # Find all local minima in position (each rep's bottom).
-    # Prominence threshold = 10% of total position range to ignore noise.
+    # Find all local minima (rep bottoms).
+    # Use a higher prominence threshold (30% of range) so small pre-lift
+    # bracing oscillations (~1–3 cm) are rejected while actual rep bottoms
+    # (typically 40–80 cm below start) are kept.
     pos_range   = float(position.max() - position.min())
-    min_prom    = max(pos_range * 0.10, 0.01)
-    # Minimum distance between bottoms: at least 0.5s worth of frames,
-    # inferred from array length (assume caller smoothed reasonably).
+    min_prom    = max(pos_range * 0.30, 0.02)
     min_dist    = max(10, n // 20)
 
     bottoms, _ = find_peaks(-position, prominence=min_prom, distance=min_dist)
 
+    # Additionally filter to bottoms that are in the lower 40% of the position
+    # range — this eliminates any residual bracing dips that passed the
+    # prominence check but are still far above the true squat depth.
+    depth_threshold = position.min() + pos_range * 0.40
+    bottoms = bottoms[position[bottoms] <= depth_threshold]
+
     if len(bottoms) > 0:
-        bottom_idx = int(bottoms[-1])   # last rep
+        bottom_idx = int(bottoms[-1])   # last qualifying rep
         print(f"[velocity] detected {len(bottoms)} rep(s) — using last bottom at idx {bottom_idx}")
     else:
         bottom_idx = int(np.argmin(position))   # fallback: global min
@@ -86,12 +92,20 @@ def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, i
         else:
             consecutive = 0
 
-    # Concentric end: the bar reaches its highest point after the bottom.
-    # Using position argmax is more robust than a velocity threshold, which
-    # can fail when tracking noise keeps velocity above the threshold after
-    # the bar has stopped moving at lockout.
-    post_bottom    = position[bottom_idx:]
-    lockout_local  = int(np.argmax(post_bottom))
+    # Concentric end: the FIRST local maximum after the bottom.
+    # argmax finds the global peak, which on heavy squat sets is often an
+    # oscillation peak above initial lockout — not the moment the bar first
+    # stopped ascending. find_peaks with a small prominence threshold finds
+    # the first genuine lockout position instead.
+    post_bottom = position[bottom_idx:]
+    prom_lockout = max(pos_range * 0.05, 0.005)   # small — just reject noise
+    peaks_local, _ = find_peaks(post_bottom, prominence=prom_lockout)
+
+    if len(peaks_local) > 0:
+        lockout_local = int(peaks_local[0])        # first peak = initial lockout
+    else:
+        lockout_local = int(np.argmax(post_bottom))  # fallback
+
     concentric_end = bottom_idx + lockout_local
     if concentric_end <= bottom_idx:
         concentric_end = n
@@ -161,7 +175,14 @@ def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFA
     eccentric_start, bottom_idx, best_end = _find_rep_phases(y_smooth, velocity)
     best_start = bottom_idx  # concentric begins at the bottom
 
-    # ── 6. Compute MCV strictly over the concentric phase ─────────────
+    # ── 6. Compute MCV over the concentric phase ─────────────────────
+    # burst_end = concentric_end (position argmax = true lockout height).
+    # Post-lockout oscillation cannot extend burst_end because the bar cannot
+    # oscillate higher than the lockout position. Sticking points mid-lift are
+    # included correctly since the bar hasn't reached peak height yet.
+    #
+    # burst_start trims only the near-zero reversal frames at the bottom where
+    # the bar is changing direction — these are not part of the intentional drive.
     conc_vel = velocity[best_start:best_end]
     conc_pos = conc_vel[conc_vel > 0]
     if len(conc_pos) == 0:
@@ -170,31 +191,12 @@ def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFA
     peak = float(np.max(conc_pos))
     burst_threshold = BURST_FRACTION * peak
 
-    # Trim near-zero frames at reversal and lockout that drag down the mean.
-    # Only average frames where velocity >= BURST_FRACTION * peak — this
-    # matches the effective "bar is actually moving" window and aligns MCV
-    # with research measurements from dedicated VBT devices.
-    in_burst = (velocity[best_start:best_end] >= burst_threshold)
-    burst_local = np.where(in_burst)[0]
-    if len(burst_local) > 0:
-        burst_start = int(best_start + burst_local[0])
+    in_burst    = np.where(velocity[best_start:best_end] >= burst_threshold)[0]
+    burst_start = int(best_start + in_burst[0]) if len(in_burst) > 0 else best_start
+    burst_end   = best_end   # always end at lockout position
 
-        # Use the first CONTINUOUS block above threshold only.
-        # Oscillation after lockout creates a gap (velocity drops below threshold),
-        # then re-crosses it — stopping at the first gap excludes those pulses.
-        burst_end_local = burst_local[0]
-        for k in range(1, len(burst_local)):
-            if burst_local[k] > burst_local[k - 1] + 1:
-                break   # first gap = end of intentional drive
-            burst_end_local = burst_local[k]
-        burst_end = int(best_start + burst_end_local) + 1
-
-        burst = velocity[burst_start:burst_end]
-        burst = burst[burst > 0]
-    else:
-        burst_start = best_start
-        burst_end   = best_end
-        burst       = conc_pos
+    burst = velocity[burst_start:burst_end]
+    burst = burst[burst > 0]
 
     if len(burst) == 0:
         burst = conc_pos

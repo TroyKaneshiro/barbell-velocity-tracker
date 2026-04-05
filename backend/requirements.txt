@@ -1,6 +1,8 @@
-fastapi
-uvicorn[standard]
-python-multipart
-opencv-contrib-python-headless
-numpy
-scipy
+fastapi==0.135.2
+uvicorn[standard]==0.42.0
+python-multipart==0.0.22
+opencv-contrib-python-headless==4.13.0.92
+numpy==2.4.4
+scipy==1.17.1
+pydantic==2.12.5
+starlette==1.0.0

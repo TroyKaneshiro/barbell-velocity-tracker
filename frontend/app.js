@@ -55,8 +55,18 @@ fetch('/plates')
   })
   .catch(() => { /* keep the static fallback option already in the HTML */ });
 
-let selectedFile = null;
-let velocityChart = null;
+let selectedFile    = null;
+let velocityChart   = null;
+let analyzeAbortCtrl = null;   // AbortController for the in-flight /analyze request
+
+function abortAnalysis() {
+  if (analyzeAbortCtrl) {
+    analyzeAbortCtrl.abort();
+    analyzeAbortCtrl = null;
+    progressWrap.classList.add('hidden');
+    analyzeBtn.disabled = false;
+  }
+}
 
 // ── File selection ───────────────────────────────────────────────
 browseBtn.addEventListener('click', () => fileInput.click());
@@ -86,6 +96,7 @@ clearFileBtn.addEventListener('click', (e) => {
 });
 
 function setFile(file) {
+  abortAnalysis();
   selectedFile = file;
   fileNameEl.textContent = file.name;
   dropContent.classList.add('hidden');
@@ -181,6 +192,7 @@ clickCanvas.addEventListener('click', (e) => {
   const px     = (e.clientX - rect.left)  * scaleX;
   const py     = (e.clientY - rect.top)   * scaleY;
 
+  abortAnalysis();
   plateClick     = { normX: px / clickCanvas.width, normY: py / clickCanvas.height };
   detectedCircle = null;
   manualEdge     = null;
@@ -276,11 +288,11 @@ analyzeBtn.addEventListener('click', () => {
   const w = parseFloat(barWeight.value);
   if (!isNaN(w) && w > 0) formData.append('bar_weight', w);
 
-  fetch('/analyze', { method: 'POST', body: formData })
+  analyzeAbortCtrl = new AbortController();
+  fetch('/analyze', { method: 'POST', body: formData, signal: analyzeAbortCtrl.signal })
     .then((res) =>
       res.text().then((text) => {
         if (!res.ok) {
-          // Show the raw server response so we can see exactly what failed
           throw new Error(`Server ${res.status}: ${text}`);
         }
         let body;
@@ -289,8 +301,11 @@ analyzeBtn.addEventListener('click', () => {
       })
     )
     .then(showResults)
-    .catch((err) => showError(err.message))
+    .catch((err) => {
+      if (err.name !== 'AbortError') showError(err.message);
+    })
     .finally(() => {
+      analyzeAbortCtrl = null;
       progressWrap.classList.add('hidden');
       analyzeBtn.disabled = false;
     });
