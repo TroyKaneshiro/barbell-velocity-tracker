@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RPE Estimator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="page">
+
+    <header class="header">
+      <h1>RPE Estimator</h1>
+      <p class="subtitle">Velocity-Based Training Analysis</p>
+    </header>
+
+    <main class="main">
+
+      <!-- ── Upload form ────────────────────────────────────────── -->
+      <section class="card upload-card">
+
+        <div class="lift-selector" role="group" aria-label="Lift type">
+          <label class="lift-opt">
+            <input type="radio" name="lift" value="squat" checked />
+            <span>Squat</span>
+          </label>
+          <label class="lift-opt">
+            <input type="radio" name="lift" value="bench" />
+            <span>Bench</span>
+          </label>
+          <label class="lift-opt">
+            <input type="radio" name="lift" value="deadlift" />
+            <span>Deadlift</span>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label class="field-label" for="plateSelect">Outer plate weight</label>
+          <select id="plateSelect" class="plate-select">
+            <option value="45 lb" selected>45 lb</option>
+          </select>
+        </div>
+
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="fileInput" accept="video/*" hidden />
+          <div class="drop-content" id="dropContent">
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <p>Drop video here or <button type="button" id="browseBtn" class="link-btn">browse</button></p>
+            <p class="hint">MP4 · MOV · AVI · side-on view recommended</p>
+          </div>
+          <div class="file-chosen hidden" id="fileChosen">
+            <span id="fileName"></span>
+            <button type="button" id="clearFile" aria-label="Remove file">✕</button>
+          </div>
+        </div>
+
+        <button class="btn-primary" id="analyzeBtn" disabled>Analyze</button>
+
+        <!-- progress -->
+        <div class="progress-wrap hidden" id="progressWrap">
+          <div class="progress-bar" id="progressBar"></div>
+          <p class="progress-label" id="progressLabel">Processing…</p>
+        </div>
+
+        <!-- error -->
+        <div class="error-box hidden" id="errorBox">
+          <strong>Error</strong>
+          <p id="errorMsg"></p>
+        </div>
+      </section>
+
+      <!-- ── Results ───────────────────────────────────────────── -->
+      <section class="results hidden" id="results">
+
+        <div class="results-top">
+          <div class="card rpe-card">
+            <div class="rpe-label">RPE</div>
+            <div class="rpe-value" id="rpeValue">—</div>
+            <div class="rpe-desc"  id="rpeDesc"></div>
+            <div class="rpe-note hidden" id="rpeNote"></div>
+          </div>
+
+          <div class="card stats-card">
+            <div class="stat-row">
+              <span class="stat-label">Mean concentric velocity</span>
+              <span class="stat-value"><span id="mcvValue">—</span> <span class="unit">m/s</span></span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Peak concentric velocity</span>
+              <span class="stat-value"><span id="peakValue">—</span> <span class="unit">m/s</span></span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Lift detected</span>
+              <span class="stat-value" id="liftValue">—</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Outer plate</span>
+              <span class="stat-value" id="plateValue">—</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Calibration</span>
+              <span class="stat-value" id="calibValue">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h2 class="chart-title">Bar Velocity</h2>
+          <canvas id="velocityChart"></canvas>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

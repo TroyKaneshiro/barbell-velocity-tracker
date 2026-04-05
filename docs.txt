@@ -1,0 +1,132 @@
+RPE ESTIMATOR — PROJECT DOCUMENTATION
+======================================
+
+
+OVERVIEW
+--------
+A web app that accepts a gym lift video, tracks the barbell using computer
+vision, computes bar velocity, and estimates RPE (Rate of Perceived Exertion)
+using published Velocity-Based Training (VBT) research.
+
+Supported lifts: Squat, Bench Press, Deadlift
+
+
+HOW IT WORKS
+------------
+1. User uploads a video and selects the lift type.
+2. The backend detects the barbell plate using Hough circle transform
+   (scans the first 60 frames), then tracks it through the video using
+   OpenCV's CSRT tracker.
+3. The plate's pixel diameter is used as an automatic ruler:
+   a standard 45 lb / 20 kg Olympic plate = 450 mm, giving a px-to-metres
+   scale factor with no manual calibration required.
+4. Y-positions are smoothed with a Savitzky-Golay filter, then
+   differentiated to produce a velocity trace (m/s, positive = upward).
+5. The longest sustained upward phase is identified as the concentric phase.
+6. Mean Concentric Velocity (MCV) and peak velocity are computed over that
+   phase.
+7. MCV is interpolated against the VBT lookup table for the selected lift
+   to produce an RPE estimate (rounded to the nearest 0.5).
+
+
+PROJECT STRUCTURE
+-----------------
+RPEApp/
+  backend/
+    main.py          — FastAPI application; serves frontend and /analyze endpoint
+    tracker.py       — Plate detection (Hough circles) and CSRT tracking
+    velocity.py      — Position smoothing, velocity calculation, concentric
+                       phase detection
+    rpe_tables.py    — VBT-to-RPE lookup tables and interpolation logic
+    requirements.txt — Python dependencies
+  frontend/
+    index.html       — Page layout
+    style.css        — Dark theme styling
+    app.js           — Drag-drop upload, fetch call, Chart.js velocity graph
+  docs.txt           — This file
+
+
+SETUP & RUNNING
+---------------
+Requirements: Python 3.10+
+
+  cd backend
+  pip install -r requirements.txt
+  python main.py
+
+The app will be available at http://localhost:8000
+
+
+API
+---
+POST /analyze
+  Form fields:
+    video      — video file (MP4, MOV, AVI, etc.)
+    lift_type  — "squat" | "bench" | "deadlift"
+
+  Response (JSON):
+    rpe                        float   — estimated RPE (0.5 increments)
+    rpe_description            string  — plain-English description (e.g. "2 reps in reserve")
+    rpe_note                   string? — set if velocity is outside the table range
+    mean_concentric_velocity   float   — MCV in m/s
+    peak_concentric_velocity   float   — peak velocity in m/s
+    lift_type                  string
+    time                       float[] — timestamp per tracked frame (seconds)
+    velocity                   float[] — velocity per frame (m/s)
+    position_m                 float[] — relative bar height per frame (metres)
+    concentric_start           int     — index into the above arrays
+    concentric_end             int
+    calibration.fps            float
+    calibration.plate_diameter_px  float
+    calibration.m_per_px       float
+
+
+VBT LOOKUP TABLES
+-----------------
+Values are Mean Concentric Velocity (m/s) mapped to RPE.
+Lower velocity = heavier relative load = higher RPE.
+
+Sources:
+  Squat    — Gonzalez-Badillo & Sanchez-Medina (2010); Pareja-Blanco et al. (2020)
+  Bench    — Zourdos et al. (2016); Jovanovic & Flanagan (2014)
+  Deadlift — Ritti-Dias et al.; assembled from published meta-analyses
+
+Squat:
+  RPE 10 → 0.30 m/s      RPE  7 → 0.60 m/s
+  RPE  9 → 0.40 m/s      RPE  6 → 0.70 m/s
+  RPE  8 → 0.50 m/s      RPE  5 → 0.80 m/s
+
+Bench Press:
+  RPE 10 → 0.15 m/s      RPE  7 → 0.36 m/s
+  RPE  9 → 0.22 m/s      RPE  6 → 0.43 m/s
+  RPE  8 → 0.29 m/s      RPE  5 → 0.50 m/s
+
+Deadlift:
+  RPE 10 → 0.15 m/s      RPE  7 → 0.38 m/s
+  RPE  9 → 0.22 m/s      RPE  6 → 0.46 m/s
+  RPE  8 → 0.30 m/s      RPE  5 → 0.54 m/s
+
+Values between table entries are linearly interpolated.
+Results outside the table range are clamped with a warning note.
+
+
+VIDEO REQUIREMENTS
+------------------
+- Side-on camera angle (camera perpendicular to the bar)
+- The outermost loaded plate must be clearly visible and well-lit
+- Assumes 45 lb / 20 kg plates for calibration (largest plate = 450 mm diameter)
+- Single rep per video recommended for cleanest analysis
+- Common formats accepted: MP4, MOV, AVI
+
+
+KNOWN LIMITATIONS
+-----------------
+- Calibration assumes 45 lb outer plates. Using smaller plates (e.g. 25 lb)
+  will shift the velocity estimate. A future plate-size selector would fix this.
+- VBT tables are population averages. Individual load-velocity profiles can
+  vary by ~10-15%, so results are best treated as a guide rather than ground
+  truth.
+- Heavily occluded bars, low-contrast backgrounds, or overhead/front-on camera
+  angles will reduce tracking reliability.
+- Multi-rep sets are partially supported — the longest upward phase is used,
+  which typically captures the last (hardest) rep, but this is not guaranteed.

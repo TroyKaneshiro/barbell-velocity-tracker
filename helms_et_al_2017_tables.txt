@@ -1,0 +1,95 @@
+RPE AND VELOCITY RELATIONSHIPS FOR THE BACK SQUAT, BENCH PRESS, AND DEADLIFT IN POWERLIFTERS
+Helms, Storey, Cross, Brown, Lenetsky, Ramsay, Dillen, Zourdos (2017)
+Journal of Strength and Conditioning Research 31(2): 292–297
+===============================================================================================
+
+
+STUDY OVERVIEW
+--------------
+N = 15 powerlifters (12 male, 3 female)
+Protocol: worked up to 1RM on squat, bench, deadlift in one session
+Velocity recorded at 80% estimated 1RM and above using GymAware
+RPE scale: Zourdos RIR-based (10 = max, 9 = 1 rep in reserve, etc.)
+
+
+TABLE 1 — PARTICIPANT CHARACTERISTICS
+--------------------------------------
+Group          Height (m)   Body mass (kg)   BMI (kg/m²)   Age (y)   Training age (y)   Squat/BW   Bench/BW   Deadlift/BW
+Female (n=3)   1.6 ± 0.1    59.0 ± 5.8       22.6 ± 1.4    36.0±6.2  4.6 ± 1.6          1.6 ± 0.3  1.0 ± 0.1  2.1 ± 0.1
+Male (n=12)    1.7 ± 0.1    87.9 ± 16.3      28.7 ± 3.1    26.5±8.1  4.5 ± 3.1          2.3 ± 0.3  1.5 ± 0.2  2.7 ± 0.5
+Combined (n=15)1.7 ± 0.1    82.1 ± 18.9      27.5 ± 3.8    28.4±8.5  4.5 ± 2.8          2.1 ± 0.4  1.4 ± 0.3  2.6 ± 0.5
+
+Relative strength = 1RM / body mass
+
+
+TABLE 2 — AVERAGE CONCENTRIC VELOCITY AT 1RM (m/s)
+----------------------------------------------------
+Lift          ACV at 1RM (mean ± SD)   vs Bench press                vs Deadlift
+Squat         0.23 ± 0.05              d=2.41±0.54, p<0.001          d=1.51±0.46, p<0.001
+                                       (most likely, very large)     (most likely, large)
+Bench press   0.10 ± 0.04              —                             d=0.80±0.46, p=0.05
+                                                                     (very likely, moderate)
+Deadlift      0.14 ± 0.05              —                             —
+
+
+TABLE 3 — REGRESSION EQUATIONS: % 1RM PREDICTED FROM VELOCITY
+--------------------------------------------------------------
+(Valid only at intensities ≥ 80% 1RM)
+
+Lift          Equation (y = %1RM, x = ACV in m/s)   r      r²    90% CL on prediction
+Squat         y = −0.449x + 1.096                   −0.91  0.83  ± ~5%
+Bench press   y = −0.600x + 1.051                   −0.90  0.81  ± ~5%
+Deadlift      y = −0.600x + 1.076                   −0.92  0.85  ± ~5%
+
+Example (squat): bar moving at 0.50 m/s
+  y = −0.449(0.50) + 1.096 = 0.87 → load is ~87% 1RM
+
+
+TABLE 4 — ACV vs RPE CORRELATIONS
+-----------------------------------
+Lift          r (ACV–RPE)   r²    r (%1RM–RPE)   r²    p
+Squat         −0.87         0.76  0.91            0.83  <0.001
+Bench press   −0.79         0.63  0.88            0.78  <0.001
+Deadlift      −0.82         0.67  0.91            0.83  <0.001
+
+Interpretation: higher velocity = lower RPE (inverse relationship)
+
+
+TABLE 5 — RPE AT 1RM ACROSS LIFTS
+------------------------------------
+Lift          RPE at 1RM (mean ± SD)   90% Confidence Limits
+Squat         9.6 ± 0.5                9.4 – 9.9
+Bench press   9.7 ± 0.4                9.5 – 9.8
+Deadlift      9.6 ± 0.5                9.4 – 9.9
+
+No significant difference in RPE at 1RM between lifts (p > 0.05)
+
+
+RPE SCALE (Zourdos RIR-Based — as used in this study)
+-------------------------------------------------------
+RPE    Meaning
+10     Maximal effort — no reps remaining
+9.5    Could marginally increase load, no more reps
+9.0    1 rep in reserve
+8.5    1–2 reps in reserve
+8.0    2 reps in reserve
+7.5    2–3 reps in reserve
+7.0    3 reps in reserve
+(and so on)
+
+
+KEY PRACTICAL NOTES
+-------------------
+- ACV at 1RM differs significantly between lifts:
+    Squat (0.23) > Deadlift (0.14) > Bench press (0.10)
+  Do NOT use the same velocity → RPE table across lifts.
+
+- The regression equations explain 81–85% of the variance in %1RM
+  from velocity, but with ±5% individual error — individual
+  load-velocity profiling gives more precise prescriptions.
+
+- Data was collected only at ≥80% 1RM. Extrapolating the regression
+  equations to lighter loads is not validated by this study.
+
+- RPE converged to ~9.6–9.7 at 1RM across all three lifts, confirming
+  the RIR-based RPE scale is consistent across movement patterns.

@@ -1,0 +1,81 @@
+VBT TABLE COMPARISON — CURRENT VALUES vs HELMS ET AL. 2017 REGRESSION
+======================================================================
+Source: Helms et al. (2017), J Strength Cond Res 31(2): 292–297
+Regression equations (valid at ≥80% 1RM, i.e. RPE 6 and above):
+  Squat:     velocity = (1.096 − %1RM) / 0.449
+  Bench:     velocity = (1.051 − %1RM) / 0.600
+  Deadlift:  velocity = (1.076 − %1RM) / 0.600
+
+%1RM values mapped to RPE using standard RIR-based scale:
+  100% = RPE 10 | 97.5% = RPE 9.5 | 95% = RPE 9 | 92.5% = RPE 8.5
+   90% = RPE  8 | 87.5% = RPE 7.5 | 85% = RPE 7 | 82.5% = RPE 6.5
+   80% = RPE  6
+
+
+SQUAT
+------
+RPE   %1RM   Regression (m/s)   Current table (m/s)   Difference (m/s)
+10    100%   0.214              0.300                 +0.086  (current ~40% higher)
+9.5   97.5%  0.269              0.350                 +0.081
+9.0   95%    0.325              0.400                 +0.075
+8.5   92.5%  0.381              0.450                 +0.069
+8.0   90%    0.436              0.500                 +0.064
+7.5   87.5%  0.492              0.550                 +0.058
+7.0   85%    0.548              0.600                 +0.052
+6.5   82.5%  0.603              0.650                 +0.047
+6.0   80%    0.659              0.700                 +0.041
+
+  → Current table is consistently FASTER than the paper's values at every RPE.
+    The gap is largest at RPE 10 (~40% off) and narrows toward RPE 6 (~6% off).
+    This means the app currently under-estimates RPE for slow reps (heavy loads).
+
+
+BENCH PRESS
+-----------
+RPE   %1RM   Regression (m/s)   Current table (m/s)   Difference (m/s)
+10    100%   0.085              0.150                 +0.065  (current ~76% higher)
+9.5   97.5%  0.127              0.190                 +0.063
+9.0   95%    0.168              0.220                 +0.052
+8.5   92.5%  0.210              0.260                 +0.050
+8.0   90%    0.252              0.290                 +0.038
+7.5   87.5%  0.293              0.330                 +0.037
+7.0   85%    0.335              0.360                 +0.025
+6.5   82.5%  0.377              0.400                 +0.023
+6.0   80%    0.418              0.430                 +0.012
+
+  → Same pattern — current table is faster than the paper at every RPE.
+    Largest discrepancy at the heavy end (RPE 10 is ~76% off).
+    Values converge well at RPE 6 (only 0.012 m/s apart).
+
+
+DEADLIFT
+--------
+RPE   %1RM   Regression (m/s)   Current table (m/s)   Difference (m/s)
+10    100%   0.127              0.150                 +0.023  (current ~18% higher)
+9.5   97.5%  0.168              0.190                 +0.022
+9.0   95%    0.210              0.220                 +0.010
+8.5   92.5%  0.252              0.260                 +0.008
+8.0   90%    0.293              0.300                 +0.007
+7.5   87.5%  0.335              0.340                 +0.005
+7.0   85%    0.377              0.380                 +0.003
+6.5   82.5%  0.418              0.420                 +0.002
+6.0   80%    0.460              0.460                 +0.000
+
+  → Deadlift current values are very close to the paper — differences are
+    within measurement noise for most of the RPE range.
+    The current table was reasonably accurate for deadlift all along.
+
+
+SUMMARY
+-------
+Lift        Max discrepancy (at RPE 10)   At RPE 8   At RPE 6   Verdict
+Squat       +0.086 m/s (~40%)             +0.064     +0.041     Needs update
+Bench       +0.065 m/s (~76%)             +0.038     +0.012     Needs update
+Deadlift    +0.023 m/s (~18%)             +0.007     +0.000     Acceptable
+
+Recommended action: replace the squat and bench tables with regression-derived
+values. Deadlift can stay as-is or be updated for consistency.
+
+Note: the Helms et al. regression was built on 15 competitive powerlifters
+working at ≥80% 1RM. It is the most directly applicable published data for
+this population and rep range, but individual profiles will still vary ±5%.
