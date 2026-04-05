@@ -110,8 +110,11 @@ class BarTracker:
         if not candidates:
             return None
 
-        # Pick the circle closest to the click
-        best = min(candidates, key=lambda c: c[3])
+        # Pick the largest circle — the outer rim is always the biggest candidate.
+        # Proximity to click is used only to break ties within 10% of the max radius,
+        # so a slightly off-centre click still returns the outer edge, not an inner bezel.
+        max_r = max(c[2] for c in candidates)
+        best  = min(candidates, key=lambda c: (c[2] < max_r * 0.90, c[3]))
         return best[0], best[1], best[2]
 
     # ── Writer helper ─────────────────────────────────────────────────────────
@@ -129,6 +132,7 @@ class BarTracker:
         debug_video_path: Optional[str] = None,
         click_x: Optional[float] = None,
         click_y: Optional[float] = None,
+        plate_r_norm: Optional[float] = None,
     ) -> TrackingResult:
         if click_x is None or click_y is None:
             raise ValueError("Click coordinates are required. Please click on the weight plate.")
@@ -136,7 +140,7 @@ class BarTracker:
         if not cap.isOpened():
             raise ValueError(f"Cannot open video: {video_path}")
         try:
-            return self._process(cap, debug_video_path, click_x, click_y)
+            return self._process(cap, debug_video_path, click_x, click_y, plate_r_norm)
         finally:
             cap.release()
 
@@ -148,6 +152,7 @@ class BarTracker:
         debug_video_path: Optional[str],
         click_x: float,
         click_y: float,
+        plate_r_norm: Optional[float] = None,
     ) -> TrackingResult:
         fps          = cap.get(cv2.CAP_PROP_FPS) or 30.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -160,18 +165,22 @@ class BarTracker:
         if not ret:
             raise ValueError("Could not read first frame.")
 
-        circle = self._find_circle_near_click(first_frame, click_x, click_y, width, height)
+        cx0 = click_x * width
+        cy0 = click_y * height
 
-        if circle is not None:
-            cx0, cy0, plate_r = circle
-            print(f"[tracker] plate found near click: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
+        if plate_r_norm is not None:
+            # User manually defined the radius via right-click — use it directly
+            plate_r = plate_r_norm * min(width, height)
+            print(f"[tracker] manual circle: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
         else:
-            # Fall back to using the click point directly with a default radius
-            cx0     = click_x * width
-            cy0     = click_y * height
-            plate_r = min(width, height) * CLICK_SEARCH_FACTOR * 0.5
-            print(f"[tracker] no circle near click — using click point directly: "
-                  f"cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
+            circle = self._find_circle_near_click(first_frame, click_x, click_y, width, height)
+            if circle is not None:
+                cx0, cy0, plate_r = circle
+                print(f"[tracker] plate found near click: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
+            else:
+                plate_r = min(width, height) * CLICK_SEARCH_FACTOR * 0.5
+                print(f"[tracker] no circle near click — using click point directly: "
+                      f"cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
 
         # CSRT bounding box — slightly larger than the plate for texture context
         box_half = int(plate_r * 1.3)

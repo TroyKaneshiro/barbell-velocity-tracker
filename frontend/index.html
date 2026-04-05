@@ -42,6 +42,12 @@
           </select>
         </div>
 
+        <div class="form-row">
+          <label class="field-label" for="barWeight">Bar weight (optional)</label>
+          <input type="number" id="barWeight" class="plate-select" min="0" step="0.5"
+                 placeholder="e.g. 100" style="width:120px" />
+        </div>
+
         <div class="drop-zone" id="dropZone">
           <input type="file" id="fileInput" accept="video/*" hidden />
           <div class="drop-content" id="dropContent">
@@ -59,7 +65,7 @@
 
         <!-- Click-to-select plate -->
         <div class="click-wrap hidden" id="clickWrap">
-          <p class="hint" style="margin-bottom:.5rem">Click on the <strong>weight plate</strong> in the frame below to identify it, then press Analyze.</p>
+          <p class="hint" style="margin-bottom:.5rem"><strong>Left-click</strong> the centre of the plate · <strong>Right-click</strong> the outer edge to manually override the detected circle</p>
           <div class="video-click-container" id="videoClickContainer">
             <video id="previewVideo" preload="metadata" style="width:100%;display:block;border-radius:8px;background:#000"></video>
             <canvas id="clickCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;border-radius:8px"></canvas>
@@ -94,6 +100,14 @@
           </div>
 
           <div class="card stats-card">
+            <div class="stat-row hidden" id="rmRow">
+              <span class="stat-label">Projected 1RM</span>
+              <span class="stat-value"><span id="rmValue">—</span> <span class="unit" id="rmUnit"></span></span>
+            </div>
+            <div class="stat-row hidden" id="pctRow">
+              <span class="stat-label">% of 1RM</span>
+              <span class="stat-value"><span id="pctValue">—</span> <span class="unit">%</span></span>
+            </div>
             <div class="stat-row">
               <span class="stat-label">Mean concentric velocity</span>
               <span class="stat-value"><span id="mcvValue">—</span> <span class="unit">m/s</span></span>
@@ -142,6 +156,6 @@
     </main>
   </div>
 
-  <script src="/static/app.js?v=4"></script>
+  <script src="/static/app.js?v=7"></script>
 </body>
 </html>

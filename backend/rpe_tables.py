@@ -8,20 +8,16 @@ squat, bench press, and deadlift.
 Sources & methodology
 ─────────────────────
 Squat:
-  Sanchez-Medina et al. (PMC6226068) — 80 strength-trained males.
-  Full back squat MPV at each %1RM. MVT at 1RM = 0.32 m/s.
-  Regression: Load (%1RM) = –5.961 × MPV² – 50.71 × MPV + 117.0  (R²=0.954)
+  Helms et al. 2017 (J Strength Cond Res 31(2), PubMed 27243918) — competitive powerlifters.
+  Regression: %1RM = −0.449 × MCV + 1.096  (r=−0.91, R²=0.83). MVT at 1RM ≈ 0.21 m/s.
 
 Bench:
-  González-Badillo & Sánchez-Medina 2010 (PubMed 20180176) — 120 trained males.
-  Bench press MPV at each %1RM. MVT at 1RM = 0.16 m/s.
-  Cross-checked against Balsalobre-Fernandez 2022 (PMC9180020) recreational
-  athlete sample (men: MVT = 0.21 m/s).
-  Final values use midpoints between the two populations.
+  Helms et al. 2017 (J Strength Cond Res 31(2), PubMed 27243918) — competitive powerlifters.
+  Regression: %1RM = −0.600 × MCV + 1.051  (r=−0.90, R²=0.81). MVT at 1RM ≈ 0.09 m/s.
 
 Deadlift:
-  Benavides-Ubric et al. (PMC7429441) — trained subjects.
-  Deadlift MV at each %1RM. MVT at 1RM = 0.33 m/s.
+  Helms et al. 2017 (J Strength Cond Res 31(2), PubMed 27243918) — competitive powerlifters.
+  Regression: %1RM = −0.600 × MCV + 1.076  (r=−0.92, R²=0.85). MVT at 1RM ≈ 0.13 m/s.
 
 %1RM → RPE mapping (standard VBT convention):
   100% = RPE 10, 97.5% = RPE 9.5, 95% = RPE 9, 92.5% = RPE 8.5,
@@ -40,59 +36,65 @@ Important caveats
 
 import numpy as np
 
+# Regression coefficients from Helms et al. 2017 for each lift.
+# Equation: %1RM = slope × MCV + intercept
+# Inverted for 1RM projection: 1RM = weight / (slope × MCV + intercept)
+REGRESSION: dict[str, tuple[float, float]] = {
+    "squat":    (-0.449, 1.096),
+    "bench":    (-0.600, 1.051),
+    "deadlift": (-0.600, 1.076),
+}
+
 # Format: [(velocity_m_s, rpe), ...] sorted ascending by velocity
 # All velocities are Mean Concentric Velocity (MCV / MPV) in m/s.
 VBT_TABLES: dict[str, list[tuple[float, float]]] = {
 
-    # ── Squat (Sanchez-Medina et al.) ─────────────────────────────────────
-    # MPV at each %1RM read directly from the study data table:
-    #   100%=0.32, 90%=0.51, 80%=0.68, 70%=0.84, 60%=1.00, 50%=1.14
-    # Half-step RPE values interpolated linearly between study points.
+    # ── Squat (Helms et al. 2017 regression) ──────────────────────────────
+    # Regression: %1RM = −0.449 × MCV + 1.096  (r=−0.91, R²=0.83)
+    # Sample: competitive powerlifters. Source: J Strength Cond Res 31(2).
+    # Velocities derived by inverting: MCV = (1.096 − %1RM) / 0.449
     "squat": [
-        (0.32, 10.0),   # 100% 1RM
-        (0.40,  9.5),   # ~97.5%
-        (0.51,  9.0),   # 90%
-        (0.59,  8.5),   # ~87.5%
-        (0.68,  8.0),   # 80%
-        (0.76,  7.5),   # ~77.5%
-        (0.84,  7.0),   # 70%
-        (0.92,  6.5),   # ~65%
-        (1.00,  6.0),   # 60%
+        (0.21, 10.0),   # 100% 1RM
+        (0.27,  9.5),   # 97.5%
+        (0.32,  9.0),   # 95%
+        (0.38,  8.5),   # 92.5%
+        (0.44,  8.0),   # 90%
+        (0.49,  7.5),   # 87.5%
+        (0.55,  7.0),   # 85%
+        (0.60,  6.5),   # 82.5%
+        (0.66,  6.0),   # 80%
     ],
 
-    # ── Bench Press (González-Badillo 2010 + Balsalobre 2022 midpoints) ───
-    # González-Badillo MVT at 1RM = 0.16 m/s; Balsalobre male MVT = 0.21 m/s.
-    # Midpoint MVT used = ~0.19 m/s, scaled proportionally across the range.
-    # Study velocities at key %1RM:
-    #   González-Badillo: 95%≈0.26, 85%≈0.45, 75%≈0.62, 65%≈0.77, 55%≈0.89
-    #   Balsalobre:       80%≈0.42, 70%≈0.57, 60%≈0.70, 50%≈0.92
-    # Values below use midpoints between the two sources.
+    # ── Bench Press (Helms et al. 2017 regression) ────────────────────────
+    # Regression: %1RM = −0.600 × MCV + 1.051  (r=−0.90, R²=0.81)
+    # Sample: competitive powerlifters. Source: J Strength Cond Res 31(2).
+    # Velocities derived by inverting: MCV = (1.051 − %1RM) / 0.600
     "bench": [
-        (0.17, 10.0),   # 100% 1RM  (midpoint of 0.10–0.21 MVTs, biased toward general)
-        (0.22,  9.5),   # ~97.5%
-        (0.28,  9.0),   # ~95%
-        (0.34,  8.5),   # ~92.5%
-        (0.42,  8.0),   # ~87.5% / 80%
-        (0.50,  7.5),   # ~82.5%
-        (0.57,  7.0),   # ~75% / 70%
-        (0.64,  6.5),   # ~67.5%
-        (0.70,  6.0),   # ~65% / 60%
+        (0.09, 10.0),   # 100% 1RM
+        (0.13,  9.5),   # 97.5%
+        (0.17,  9.0),   # 95%
+        (0.21,  8.5),   # 92.5%
+        (0.25,  8.0),   # 90%
+        (0.29,  7.5),   # 87.5%
+        (0.34,  7.0),   # 85%
+        (0.38,  6.5),   # 82.5%
+        (0.42,  6.0),   # 80%
     ],
 
-    # ── Deadlift (Benavides-Ubric et al.) ─────────────────────────────────
-    # MV at each %1RM from study data table:
-    #   100%=0.33, 90%=0.45, 80%=0.57, 70%=0.68, 60%=0.80, 50%=0.91
-    # Half-step RPE values interpolated linearly between study points.
+    # ── Deadlift (Helms et al. 2017 regression) ───────────────────────────
+    # Regression: %1RM = −0.600 × MCV + 1.076  (r=−0.92, R²=0.85)
+    # Sample: competitive powerlifters. Source: J Strength Cond Res 31(2).
+    # Velocities derived by inverting: MCV = (1.076 − %1RM) / 0.600
     "deadlift": [
-        (0.33, 10.0),   # 100% 1RM
-        (0.39,  9.5),   # ~97.5%
-        (0.45,  9.0),   # 90%
-        (0.51,  8.5),   # ~87.5%
-        (0.57,  8.0),   # 80%
-        (0.63,  7.5),   # ~77.5%
-        (0.68,  7.0),   # 70%
-        (0.74,  6.5),   # ~65%
-        (0.80,  6.0),   # 60%
+        (0.13, 10.0),   # 100% 1RM
+        (0.17,  9.5),   # 97.5%
+        (0.21,  9.0),   # 95%
+        (0.25,  8.5),   # 92.5%
+        (0.29,  8.0),   # 90%
+        (0.34,  7.5),   # 87.5%
+        (0.38,  7.0),   # 85%
+        (0.42,  6.5),   # 82.5%
+        (0.46,  6.0),   # 80%
     ],
 }
 
@@ -148,3 +150,45 @@ def velocity_to_rpe(lift_type: str, mean_concentric_velocity: float) -> dict:
     description = RPE_DESCRIPTIONS.get(rpe, f"{rpe} RPE")
 
     return {"rpe": rpe, "description": description, "note": note}
+
+
+def projected_1rm(lift_type: str, mean_concentric_velocity: float, weight: float) -> dict:
+    """
+    Estimate 1RM from mean concentric velocity and the weight on the bar.
+
+    Uses the Helms et al. 2017 regression: %1RM = slope × MCV + intercept
+    Rearranged: 1RM = weight / %1RM
+
+    Args:
+        lift_type: "squat", "bench", or "deadlift"
+        mean_concentric_velocity: MCV in m/s
+        weight: weight lifted in any unit (kg or lb) — 1RM returned in same unit
+
+    Returns:
+        {
+            "projected_1rm": float,
+            "percent_1rm":   float,   # 0–1 scale
+            "note": str | None
+        }
+    """
+    lift_type = lift_type.lower()
+    if lift_type not in REGRESSION:
+        raise ValueError(f"Unknown lift type '{lift_type}'. Use: squat, bench, deadlift.")
+
+    slope, intercept = REGRESSION[lift_type]
+    pct = slope * mean_concentric_velocity + intercept
+
+    note = None
+    if pct <= 0:
+        return {"projected_1rm": None, "percent_1rm": None,
+                "note": "Velocity too high to estimate 1RM from this regression"}
+    if pct > 1.0:
+        pct  = 1.0
+        note = "Velocity at or below MVT — weight is at or above estimated 1RM"
+
+    one_rm = round(weight / pct, 1)
+    return {
+        "projected_1rm": one_rm,
+        "percent_1rm":   round(pct, 3),
+        "note":          note,
+    }

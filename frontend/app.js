@@ -20,9 +20,12 @@ const clickCanvas       = document.getElementById('clickCanvas');
 const clickStatus       = document.getElementById('clickStatus');
 
 const plateSelect = document.getElementById('plateSelect');
+const barWeight   = document.getElementById('barWeight');
 
 // ── Click state ─────────────────────────────────────────────────
-let plateClick = null;   // { normX, normY } in 0-1 coords
+let plateClick     = null;   // { normX, normY } in 0-1 coords
+let detectedCircle = null;   // { cx_norm, cy_norm, r_norm } from /detect-plate, or null
+let manualEdge     = null;   // { normX, normY } right-click edge point, or null
 
 // Result fields
 const rpeValue  = document.getElementById('rpeValue');
@@ -34,6 +37,11 @@ const liftValue = document.getElementById('liftValue');
 const plateValue= document.getElementById('plateValue');
 const calibValue= document.getElementById('calibValue');
 const platePxValue = document.getElementById('platePxValue');
+const rmRow      = document.getElementById('rmRow');
+const rmValue    = document.getElementById('rmValue');
+const rmUnit     = document.getElementById('rmUnit');
+const pctRow     = document.getElementById('pctRow');
+const pctValue   = document.getElementById('pctValue');
 const debugCard  = document.getElementById('debugCard');
 const debugVideo = document.getElementById('debugVideo');
 
@@ -85,7 +93,9 @@ function setFile(file) {
   hideError();
 
   // Show preview and ask user to click the plate
-  plateClick = null;
+  plateClick     = null;
+  detectedCircle = null;
+  manualEdge     = null;
   clickStatus.textContent = 'No plate selected';
   analyzeBtn.disabled = true;
   previewVideo.src = URL.createObjectURL(file);
@@ -102,26 +112,66 @@ function syncCanvas() {
   redrawCanvas();
 }
 
+function _drawCircle(ctx, cx, cy, r, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = Math.max(2, r * 0.05);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(3, r * 0.06), 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function _manualRadius() {
+  if (!plateClick || !manualEdge) return null;
+  const cx = plateClick.normX * clickCanvas.width;
+  const cy = plateClick.normY * clickCanvas.height;
+  const ex = manualEdge.normX * clickCanvas.width;
+  const ey = manualEdge.normY * clickCanvas.height;
+  return Math.hypot(ex - cx, ey - cy);
+}
+
 function redrawCanvas() {
   const ctx = clickCanvas.getContext('2d');
   ctx.clearRect(0, 0, clickCanvas.width, clickCanvas.height);
   if (!plateClick) return;
 
-  const x = plateClick.normX * clickCanvas.width;
-  const y = plateClick.normY * clickCanvas.height;
-  const r = Math.min(clickCanvas.width, clickCanvas.height) * 0.04;
+  const manualR = _manualRadius();
 
-  ctx.strokeStyle = '#43d982';
-  ctx.lineWidth   = Math.max(2, r * 0.15);
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.stroke();
+  if (manualR !== null) {
+    // Manual circle defined by left-click center + right-click edge — draw in orange
+    const cx = plateClick.normX * clickCanvas.width;
+    const cy = plateClick.normY * clickCanvas.height;
+    _drawCircle(ctx, cx, cy, manualR, '#ff8c42');
 
-  // Crosshair
-  ctx.beginPath();
-  ctx.moveTo(x - r * 1.5, y); ctx.lineTo(x + r * 1.5, y);
-  ctx.moveTo(x, y - r * 1.5); ctx.lineTo(x, y + r * 1.5);
-  ctx.stroke();
+    // Edge point dot
+    ctx.fillStyle = '#ff8c42';
+    ctx.beginPath();
+    ctx.arc(manualEdge.normX * clickCanvas.width, manualEdge.normY * clickCanvas.height, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (detectedCircle) {
+    // Hough-detected circle — draw in green
+    const cx = detectedCircle.cx_norm * clickCanvas.width;
+    const cy = detectedCircle.cy_norm * clickCanvas.height;
+    const r  = detectedCircle.r_norm  * Math.min(clickCanvas.width, clickCanvas.height);
+    _drawCircle(ctx, cx, cy, r, '#43d982');
+  } else {
+    // Fallback: crosshair at click while detection in flight or failed
+    const x = plateClick.normX * clickCanvas.width;
+    const y = plateClick.normY * clickCanvas.height;
+    const r = Math.min(clickCanvas.width, clickCanvas.height) * 0.04;
+    ctx.strokeStyle = '#f9c74f';
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - r * 1.5, y); ctx.lineTo(x + r * 1.5, y);
+    ctx.moveTo(x, y - r * 1.5); ctx.lineTo(x, y + r * 1.5);
+    ctx.stroke();
+  }
 }
 
 clickCanvas.addEventListener('click', (e) => {
@@ -131,19 +181,58 @@ clickCanvas.addEventListener('click', (e) => {
   const px     = (e.clientX - rect.left)  * scaleX;
   const py     = (e.clientY - rect.top)   * scaleY;
 
-  plateClick = {
-    normX: px / clickCanvas.width,
-    normY: py / clickCanvas.height,
-  };
-
-  clickStatus.textContent = `Plate selected at (${(plateClick.normX * 100).toFixed(1)}%, ${(plateClick.normY * 100).toFixed(1)}%) — click again to reposition`;
+  plateClick     = { normX: px / clickCanvas.width, normY: py / clickCanvas.height };
+  detectedCircle = null;
+  manualEdge     = null;
   analyzeBtn.disabled = false;
+  clickStatus.textContent = 'Detecting plate…';
+  redrawCanvas();
+
+  const fd = new FormData();
+  fd.append('video',   selectedFile);
+  fd.append('click_x', plateClick.normX);
+  fd.append('click_y', plateClick.normY);
+
+  fetch('/detect-plate', { method: 'POST', body: fd })
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.found) {
+        detectedCircle = data;
+        clickStatus.textContent = 'Plate detected — right-click the outer edge to correct, or left-click to reposition';
+      } else {
+        clickStatus.textContent = 'No circle found — right-click the outer edge of the plate to set it manually';
+      }
+      redrawCanvas();
+    })
+    .catch(() => {
+      clickStatus.textContent = 'Detection failed — right-click the outer edge to set manually';
+      redrawCanvas();
+    });
+});
+
+clickCanvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (!plateClick) return;
+
+  const rect   = clickCanvas.getBoundingClientRect();
+  const scaleX = clickCanvas.width  / rect.width;
+  const scaleY = clickCanvas.height / rect.height;
+  const px     = (e.clientX - rect.left)  * scaleX;
+  const py     = (e.clientY - rect.top)   * scaleY;
+
+  manualEdge     = { normX: px / clickCanvas.width, normY: py / clickCanvas.height };
+  detectedCircle = null;
+
+  const r = _manualRadius();
+  clickStatus.textContent = `Manual circle set (r=${r.toFixed(0)}px) — right-click again to adjust`;
   redrawCanvas();
 });
 
 function clearFile() {
-  selectedFile = null;
-  plateClick   = null;
+  selectedFile   = null;
+  plateClick     = null;
+  detectedCircle = null;
+  manualEdge     = null;
   fileInput.value = '';
   dropContent.classList.remove('hidden');
   fileChosen.classList.add('hidden');
@@ -179,6 +268,14 @@ analyzeBtn.addEventListener('click', () => {
   formData.append('click_x', plateClick.normX);
   formData.append('click_y', plateClick.normY);
 
+  const manualR = _manualRadius();
+  if (manualR !== null) {
+    formData.append('plate_r_norm', manualR / Math.min(clickCanvas.width, clickCanvas.height));
+  }
+
+  const w = parseFloat(barWeight.value);
+  if (!isNaN(w) && w > 0) formData.append('bar_weight', w);
+
   fetch('/analyze', { method: 'POST', body: formData })
     .then((res) =>
       res.text().then((text) => {
@@ -209,6 +306,19 @@ function showResults(data) {
     rpeNote.classList.remove('hidden');
   } else {
     rpeNote.classList.add('hidden');
+  }
+
+  // 1RM projection
+  if (data.projected_1rm != null) {
+    const unit = barWeight.value ? (barWeight.placeholder.includes('kg') ? 'kg' : '') : '';
+    rmValue.textContent = data.projected_1rm;
+    rmUnit.textContent  = unit || (plateSelect.value.includes('kg') ? 'kg' : 'lb');
+    pctValue.textContent = (data.percent_1rm * 100).toFixed(1);
+    rmRow.classList.remove('hidden');
+    pctRow.classList.remove('hidden');
+  } else {
+    rmRow.classList.add('hidden');
+    pctRow.classList.add('hidden');
   }
 
   mcvValue.textContent  = data.mean_concentric_velocity.toFixed(3);

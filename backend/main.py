@@ -12,13 +12,15 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from typing import Optional
+
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from tracker import BarTracker
 from velocity import calculate_velocity
-from rpe_tables import velocity_to_rpe
+from rpe_tables import velocity_to_rpe, projected_1rm
 from plates import PLATE_DIAMETERS, DEFAULT_PLATE, get_diameter
 
 # ---------------------------------------------------------------------------
@@ -57,6 +59,56 @@ async def list_plates():
     return {"plates": list(PLATE_DIAMETERS.keys()), "default": DEFAULT_PLATE}
 
 
+@app.post("/detect-plate")
+async def detect_plate(
+    video: UploadFile = File(...),
+    click_x: float = Form(...),
+    click_y: float = Form(...),
+):
+    """
+    Run Hough circle detection on the first frame near the user's click.
+    Returns normalised circle coordinates so the frontend can overlay them.
+    """
+    suffix   = Path(video.filename or "video.mp4").suffix or ".mp4"
+    tmp_path = tempfile.mktemp(suffix=suffix)
+    try:
+        with open(tmp_path, "wb") as fh:
+            shutil.copyfileobj(video.file, fh)
+
+        cap = cv2.VideoCapture(tmp_path)
+        if not cap.isOpened():
+            raise HTTPException(422, "Cannot open video")
+        ret, frame = cap.read()
+        cap.release()
+        if not ret:
+            raise HTTPException(422, "Cannot read first frame")
+
+        h, w = frame.shape[:2]
+        tracker = BarTracker()
+        circle  = tracker._find_circle_near_click(frame, click_x, click_y, w, h)
+
+        if circle is None:
+            return {"found": False}
+
+        cx, cy, r = circle
+        return {
+            "found":  True,
+            "cx_norm": cx / w,
+            "cy_norm": cy / h,
+            "r_norm":  r  / min(w, h),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Detection error: {exc}")
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+
+
 @app.post("/analyze")
 async def analyze(
     video: UploadFile = File(...),
@@ -64,6 +116,8 @@ async def analyze(
     plate: str = Form(DEFAULT_PLATE),
     click_x: float = Form(...),
     click_y: float = Form(...),
+    plate_r_norm: Optional[float] = Form(default=None),
+    bar_weight: Optional[float] = Form(default=None),
 ):
     lift_type = lift_type.lower().strip()
     if lift_type not in VALID_LIFTS:
@@ -87,7 +141,8 @@ async def analyze(
 
         # ── Track ────────────────────────────────────────────────────
         tracking = BarTracker(lift_type=lift_type).process_video(
-            tmp_path, debug_video_path=debug_avi, click_x=click_x, click_y=click_y
+            tmp_path, debug_video_path=debug_avi, click_x=click_x, click_y=click_y,
+            plate_r_norm=plate_r_norm,
         )
 
         # ── Velocity ─────────────────────────────────────────────────
@@ -102,6 +157,7 @@ async def analyze(
         # ── RPE lookup ───────────────────────────────────────────────
         mcv        = vel["mean_concentric_velocity"]
         rpe_result = velocity_to_rpe(lift_type, mcv)
+        rm_result  = projected_1rm(lift_type, mcv, bar_weight) if bar_weight else None
 
         _prune_debug_videos(DEBUG_DIR, keep=5, latest=debug_filename)
 
@@ -110,6 +166,9 @@ async def analyze(
             "rpe":                       rpe_result["rpe"],
             "rpe_description":           rpe_result["description"],
             "rpe_note":                  rpe_result.get("note"),
+            "projected_1rm":             rm_result["projected_1rm"] if rm_result else None,
+            "percent_1rm":               rm_result["percent_1rm"]   if rm_result else None,
+            "rm_note":                   rm_result["note"]           if rm_result else None,
             "mean_concentric_velocity":  mcv,
             "peak_concentric_velocity":  vel["peak_concentric_velocity"],
             "debug_video_url":           f"/debug/{debug_filename}",
