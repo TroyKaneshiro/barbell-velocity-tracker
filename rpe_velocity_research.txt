@@ -1,0 +1,241 @@
+RPE TO VELOCITY CORRELATION — RESEARCH SUMMARY
+================================================
+Compiled from peer-reviewed literature for use in velocity-based RPE estimation.
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. BRYAN MANN VBT TABLE (Practitioner Framework, ~2010s)
+────────────────────────────────────────────────────────────────────────────────
+The most widely used practitioner reference. Derived from a large collegiate
+athlete coaching dataset, not a controlled peer-reviewed study. Lift-agnostic
+(primarily squat-derived). Uses mean/average velocity.
+
+  RPE | RIR | Mean Velocity (m/s)
+  ----|-----|--------------------
+   10 |  0  | < 0.30
+    9 |  1  | 0.30 – 0.50
+    8 |  2  | 0.50 – 0.75
+    7 |  3  | 0.75 – 1.00
+    6 |  4  | 1.00 – 1.30
+    5 | 5+  | > 1.30
+
+Note: Some experienced lifters grind to as low as 0.15 m/s at true max effort.
+This table is NOT calibrated separately for bench press or deadlift.
+
+Sources: Mash Elite Performance, GymAware, ZeroSumGains Blog
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. HELMS ET AL. 2017 — KEY PEER-REVIEWED STUDY
+────────────────────────────────────────────────────────────────────────────────
+Citation: Helms ER et al. "RPE and Velocity Relationships for the Back Squat,
+Bench Press, and Deadlift in Powerlifters."
+Journal of Strength and Conditioning Research, 31(2), 292–297.
+PubMed: https://pubmed.ncbi.nlm.nih.gov/27243918/
+
+Sample: 15 competitive powerlifters (12M, 3F), mean age 28.4 ± 8.5 years.
+Worked up to 1RM on each lift in separate sessions.
+
+MINIMUM VELOCITY THRESHOLD (MVT) AT 1RM (RPE ~9.6–9.7):
+
+  Lift         | ACV at 1RM (m/s) | RPE at 1RM
+  -------------|------------------|------------
+  Back Squat   | 0.23 ± 0.05      | 9.6 ± 0.5
+  Bench Press  | 0.10 ± 0.04      | 9.7 ± 0.4
+  Deadlift     | 0.14 ± 0.05      | 9.6 ± 0.5
+
+CORRELATION COEFFICIENTS:
+  ACV vs. RPE:   r = −0.79 to −0.87 (strong inverse)
+  ACV vs. %1RM:  r = −0.90 to −0.92 (very strong inverse)
+  %1RM vs. RPE:  r =  0.88 to  0.91 (very strong)
+
+Important: This study used competitive powerlifters. Their 1RM velocities are
+significantly lower than the general trained population (see Section 5).
+The authors recommend building individual velocity-load profiles rather than
+relying on group means.
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. BACK SQUAT LOAD-VELOCITY TABLE
+────────────────────────────────────────────────────────────────────────────────
+Source: Sanchez-Medina et al., PMC6226068
+Sample: 80 strength-trained male athletes
+
+  %1RM | MV (m/s)     | MPV (m/s)    | Approx RPE
+  -----|--------------|--------------|------------
+   40% | 1.19 ± 0.08  | 1.28 ± 0.08  | ~5
+   50% | 1.08 ± 0.07  | 1.14 ± 0.07  | ~5–6
+   60% | 0.95 ± 0.07  | 1.00 ± 0.07  | ~6
+   70% | 0.82 ± 0.06  | 0.84 ± 0.06  | ~7
+   80% | 0.67 ± 0.04  | 0.68 ± 0.04  | ~8
+   90% | 0.50 ± 0.03  | 0.51 ± 0.03  | ~9
+  100% | 0.32 ± 0.03  | 0.32 ± 0.03  | ~10
+
+MVT range at 1RM: 0.24–0.37 m/s (individual spread).
+Regression: Load (%1RM) = –5.961 × MPV² – 50.71 × MPV + 117.0  (R² = 0.954)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. BENCH PRESS LOAD-VELOCITY TABLE
+────────────────────────────────────────────────────────────────────────────────
+Source: González-Badillo & Sánchez-Medina 2010, PMC / Int J Sports Med
+PubMed: https://pubmed.ncbi.nlm.nih.gov/20180176/
+Sample: 120 strength-trained males. R² = 0.98 for MPV vs. %1RM.
+
+Regression: MPV = −0.00003233 × Load² − 0.02022 × Load + 1.881
+
+  %1RM | Approx MPV (m/s) | Approx RPE
+  -----|------------------|------------
+  ~45% | ~1.00            | ~5–6
+  ~55% | ~0.89            | ~6
+  ~65% | ~0.77            | ~7
+  ~75% | ~0.62            | ~7–8
+  ~85% | ~0.45            | ~8–9
+  ~95% | ~0.26            | ~9–10
+  100% | 0.16 ± 0.04      | ~10
+
+Note: The general trained male bench MVT (0.16 m/s) is considerably higher than
+the Helms powerlifter MVT (0.10 m/s). Powerlifters grind harder at true max.
+
+Source (large recreational sample, Balsalobre-Fernandez 2022, PMC9180020):
+
+  %1RM | Men MPV (m/s) | Women MPV (m/s) | Approx RPE
+  -----|---------------|-----------------|------------
+   50% | 0.92 ± 0.10   | 0.82 ± 0.09     | ~5–6
+   60% | 0.70 ± 0.10   | 0.63 ± 0.09     | ~6–7
+   70% | 0.57 ± 0.10   | 0.51 ± 0.10     | ~7–8
+   80% | 0.42 ± 0.09   | 0.36 ± 0.08     | ~8–9
+  100% | 0.21 ± 0.10   | 0.19 ± 0.07     | ~10
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. DEADLIFT LOAD-VELOCITY TABLE
+────────────────────────────────────────────────────────────────────────────────
+Source: Benavides-Ubric et al., PMC7429441
+Sample: Trained subjects
+
+  %1RM | MV (m/s)     | MPV (m/s)    | Approx RPE
+  -----|--------------|--------------|------------
+   40% | 1.02 ± 0.09  | 1.09 ± 0.12  | ~5
+   50% | 0.91 ± 0.08  | 0.96 ± 0.10  | ~5–6
+   60% | 0.80 ± 0.07  | 0.83 ± 0.08  | ~6–7
+   70% | 0.68 ± 0.06  | 0.71 ± 0.07  | ~7
+   80% | 0.57 ± 0.05  | 0.58 ± 0.05  | ~8
+   90% | 0.45 ± 0.04  | 0.45 ± 0.04  | ~9
+  100% | 0.33 ± 0.04  | 0.33 ± 0.04  | ~10
+
+Regression: Load (%1RM) = –80.188 × MV + 124.929
+
+Note: The general trained deadlift MVT (0.33 m/s) is much higher than the Helms
+powerlifter sample (0.14 m/s). Large discrepancy likely due to population
+difference (general trained vs. competitive powerlifters) and equipment
+(straps, deadlift shoes alter the velocity profile).
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. TRAINED VS. UNTRAINED / POWERLIFTER DIFFERENCES
+────────────────────────────────────────────────────────────────────────────────
+One of the most practically important findings — frequently overlooked.
+
+  Population                        | Squat MVT  | Bench MVT  | Deadlift MVT
+  ----------------------------------|------------|------------|-------------
+  General/novice lifters            | 0.30–0.34  | 0.15–0.16  | 0.25–0.33
+  Competitive powerlifters (Helms)  | 0.23±0.05  | 0.10±0.04  | 0.14±0.05
+  Female recreational (Balsalobre)  | 0.23–0.25  | ~0.19      | —
+
+Key finding: Experienced powerlifters have significantly lower MVTs.
+Applying general-population velocity tables to powerlifters will consistently
+UNDERESTIMATE the intensity being trained at a given velocity.
+The bench press difference is most extreme: 0.16 m/s (general) vs. 0.10 m/s
+(powerlifter) — a 40% difference at true max effort.
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. SYNTHESISED BEST-ESTIMATE RPE TABLE BY LIFT (single rep, trained lifters)
+────────────────────────────────────────────────────────────────────────────────
+These are practical midpoint estimates derived from combining the above sources.
+Ranges reflect trained general population vs. competitive powerlifter spread.
+
+  RPE | RIR | Squat MCV (m/s) | Bench MCV (m/s) | Deadlift MCV (m/s)
+  ----|-----|-----------------|-----------------|-------------------
+   10 |  0  | 0.23 – 0.32     | 0.10 – 0.16     | 0.14 – 0.33
+    9 |  1  | 0.35 – 0.50     | 0.22 – 0.35     | 0.30 – 0.45
+    8 |  2  | 0.50 – 0.67     | 0.35 – 0.45     | 0.45 – 0.57
+    7 |  3  | 0.67 – 0.82     | 0.45 – 0.57     | 0.57 – 0.68
+    6 |  4  | 0.82 – 0.95     | 0.57 – 0.70     | 0.68 – 0.80
+
+CURRENT rpe_tables.py USES (for reference):
+  These should be cross-checked against the above and updated accordingly.
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. KEY CAVEATS AND LIMITATIONS
+────────────────────────────────────────────────────────────────────────────────
+1. NO UNIVERSAL TABLE IS VALIDATED FOR ALL LIFTERS.
+   The load-velocity relationship must be individually profiled for accurate
+   prescription. Group means can be off by 0.10–0.15 m/s for any individual.
+
+2. MVT VARIES DRAMATICALLY BY LIFT.
+   Bench ~0.10–0.16 m/s vs. squat ~0.23–0.32 m/s vs. deadlift ~0.14–0.33 m/s.
+   Never apply one lift's velocity thresholds to another.
+
+3. POWERLIFTERS MOVE SLOWER AT MAX EFFORT THAN GENERAL POPULATION.
+   Applying general-population tables to competitive powerlifters overestimates
+   intensity at a given velocity.
+
+4. WOMEN MAY HAVE SLIGHTLY LOWER MVTs.
+   Squat: ~0.23 vs. ~0.26 m/s; Bench: ~0.19 vs. ~0.21 m/s (women vs. men).
+
+5. DAY-TO-DAY VARIABILITY IS REAL.
+   Velocity at a given %1RM fluctuates due to fatigue, sleep, and readiness.
+   This is actually the primary use case for VBT — autoregulation, not static
+   look-up tables.
+
+6. INDIVIDUAL r² BETWEEN VELOCITY AND PERCEIVED RIR IS ONLY ~0.30.
+   (PeerJ 2025 study, n=2,972 measurements). Velocity predicts perceived effort
+   poorly for many individuals, despite strong group-level correlations.
+   RPE-velocity mapping is most reliable near failure (RPE 9–10) and becomes
+   progressively less reliable at lower intensities (RPE 6–7).
+
+7. MULTI-REP SETS COMPLICATE EVERYTHING.
+   The tables above apply to single-rep efforts. In multi-rep sets, velocity
+   declines across reps; RPE-velocity mapping is governed by velocity loss (%)
+   relative to the first rep, not absolute velocity alone.
+
+8. MV vs. MPV DISTINCTION MATTERS AT LIGHTER LOADS.
+   At lighter loads, mean velocity (MV) and mean propulsive velocity (MPV)
+   diverge because there is a deceleration phase; MPV excludes this and is more
+   stable for load estimation at submaximal intensities. At ≥80% 1RM, they
+   converge and the distinction becomes less important.
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. SOURCES
+────────────────────────────────────────────────────────────────────────────────
+Helms et al. 2017 — RPE and Velocity Relationships for Squat, Bench, Deadlift
+  https://pubmed.ncbi.nlm.nih.gov/27243918/
+  https://journals.lww.com/nsca-jscr/fulltext/2017/02000/rpe_and_velocity_relationships_for_the_back_squat,.2.aspx
+
+González-Badillo & Sánchez-Medina 2010 — Movement Velocity as Loading Intensity
+  https://pubmed.ncbi.nlm.nih.gov/20180176/
+
+Sanchez-Medina et al. — Relative Load From Bar Velocity in Full Back Squat
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC6226068/
+
+Benavides-Ubric et al. — Load-Velocity Relationship in Deadlift Exercise
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC7429441/
+
+Balsalobre-Fernandez et al. 2022 — Load-Velocity Profile: Full Squat & Bench
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC9180020/
+
+Helms et al. — Application of the RIR-Based RPE Scale for Resistance Training
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC4961270/
+
+Bryan Mann / Mash Elite Performance — Velocity and the RPE Scale
+  https://www.mashelite.com/velocity-and-the-rpe-scale/
+
+ZeroSumGains — Powerlifter's Guide to VBT Pt 7: RPE to VBT Translator
+  http://zerosumgains.blogspot.com/2017/05/a-powerlifters-guide-to-vbt-pt-7-rpe-to.html
+
+GymAware — Bryan Mann Talks Velocity Based Training
+  https://gymaware.com/strength-coach-bryan-mann-talks-velocity-based-training/

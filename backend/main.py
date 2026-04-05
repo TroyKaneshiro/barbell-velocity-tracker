@@ -9,6 +9,9 @@ import tempfile
 import uuid
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -87,11 +90,14 @@ async def analyze(
             tmp_path, debug_video_path=debug_avi, click_x=click_x, click_y=click_y
         )
 
-        # ── Convert debug video to browser-playable mp4 ──────────────
-        debug_filename = _convert_to_mp4(DEBUG_DIR, debug_filename)
-
         # ── Velocity ─────────────────────────────────────────────────
         vel = calculate_velocity(tracking, plate_diameter_m=plate_diameter_m)
+
+        # ── Annotate debug video with velocity + phase overlay ────────
+        _annotate_debug_video(debug_avi, vel)
+
+        # ── Convert debug video to browser-playable mp4 ──────────────
+        debug_filename = _convert_to_mp4(DEBUG_DIR, debug_filename)
 
         # ── RPE lookup ───────────────────────────────────────────────
         mcv        = vel["mean_concentric_velocity"]
@@ -114,6 +120,9 @@ async def analyze(
             "eccentric_start":           vel.get("eccentric_start", 0),
             "concentric_start":          vel["concentric_start"],
             "concentric_end":            vel["concentric_end"],
+            "burst_start":               vel["burst_start"],
+            "burst_end":                 vel["burst_end"],
+            "burst_threshold":           vel["burst_threshold"],
             # calibration
             "calibration": {
                 "fps":               vel["fps"],
@@ -139,6 +148,76 @@ async def analyze(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _annotate_debug_video(video_path: str, vel: dict) -> None:
+    """Re-encode debug video adding per-frame velocity value and phase label."""
+    velocities      = vel["velocity"]
+    eccentric_start = vel["eccentric_start"]
+    concentric_start= vel["concentric_start"]
+    concentric_end  = vel["concentric_end"]
+    burst_start     = vel["burst_start"]
+    burst_end       = vel["burst_end"]
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    tmp_path = video_path + ".annot.avi"
+    fourcc   = cv2.VideoWriter_fourcc(*"MJPG")
+    writer   = cv2.VideoWriter(tmp_path, fourcc, fps, (w, h))
+    if not writer.isOpened():
+        cap.release()
+        return
+
+    PHASE_COLORS = {
+        "SETUP":      (160, 160, 160),
+        "ECCENTRIC":  (200, 130,  60),
+        "CONCENTRIC": ( 60,  60, 210),
+        "BURST":      ( 50, 200, 100),
+        "LOCKOUT":    (160, 160, 160),
+    }
+
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        v = velocities[frame_idx] if frame_idx < len(velocities) else 0.0
+
+        if frame_idx < eccentric_start:
+            phase = "SETUP"
+        elif frame_idx < concentric_start:
+            phase = "ECCENTRIC"
+        elif burst_start <= frame_idx < burst_end:
+            phase = "BURST"
+        elif frame_idx < concentric_end:
+            phase = "CONCENTRIC"
+        else:
+            phase = "LOCKOUT"
+
+        color = PHASE_COLORS[phase]
+        font  = cv2.FONT_HERSHEY_SIMPLEX
+
+        # Semi-transparent bar at bottom
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, h - 56), (w, h), (20, 20, 20), -1)
+        cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+
+        cv2.putText(frame, f"v = {v:+.3f} m/s", (10, h - 32), font, 0.65, (220, 220, 220), 2)
+        cv2.putText(frame, phase,                (10, h -  8), font, 0.55, color,           2)
+
+        writer.write(frame)
+        frame_idx += 1
+
+    cap.release()
+    writer.release()
+    os.replace(tmp_path, video_path)
+
 
 def _convert_to_mp4(directory: Path, avi_filename: str) -> str:
     """Convert MJPEG .avi → H.264 .mp4 via ffmpeg. Returns served filename."""

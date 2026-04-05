@@ -33,6 +33,7 @@ const peakValue = document.getElementById('peakValue');
 const liftValue = document.getElementById('liftValue');
 const plateValue= document.getElementById('plateValue');
 const calibValue= document.getElementById('calibValue');
+const platePxValue = document.getElementById('platePxValue');
 const debugCard  = document.getElementById('debugCard');
 const debugVideo = document.getElementById('debugVideo');
 
@@ -215,6 +216,7 @@ function showResults(data) {
   liftValue.textContent  = data.lift_type.charAt(0).toUpperCase() + data.lift_type.slice(1);
   plateValue.textContent = `${data.calibration.plate} (${(data.calibration.plate_diameter_m * 1000).toFixed(0)} mm)`;
   calibValue.textContent = `${data.calibration.fps.toFixed(0)} fps · ${data.calibration.m_per_px.toFixed(4)} m/px`;
+  platePxValue.textContent = data.calibration.plate_diameter_px.toFixed(1);
 
   drawChart(data);
 
@@ -241,12 +243,15 @@ function drawChart(data) {
 
   const labels = data.time.map((t) => t.toFixed(2));
   const vel    = data.velocity;
-  const eStart = data.eccentric_start;
-  const cStart = data.concentric_start;
-  const cEnd   = data.concentric_end;
-  const mcv    = data.mean_concentric_velocity;
+  const eStart  = data.eccentric_start;
+  const cStart  = data.concentric_start;
+  const cEnd    = data.concentric_end;
+  const bStart  = data.burst_start;
+  const bEnd    = data.burst_end;
+  const bThresh = data.burst_threshold;
+  const mcv     = data.mean_concentric_velocity;
 
-  // Background highlights: blue = eccentric, red = concentric
+  // Background highlights: blue = eccentric, red = concentric, green = burst (MCV window)
   const phasePlugin = {
     id: 'phaseRegions',
     beforeDraw(chart) {
@@ -265,8 +270,26 @@ function drawChart(data) {
       // Concentric phase (bar going up)
       const cx1 = xScale.getPixelForValue(cStart);
       const cx2 = xScale.getPixelForValue(cEnd - 1);
-      c.fillStyle = 'rgba(230,57,70,0.12)';
+      c.fillStyle = 'rgba(230,57,70,0.10)';
       c.fillRect(cx1, chartArea.top, cx2 - cx1, chartArea.bottom - chartArea.top);
+
+      // Burst window — frames used for MCV (green)
+      const bx1 = xScale.getPixelForValue(bStart);
+      const bx2 = xScale.getPixelForValue(bEnd - 1);
+      c.fillStyle = 'rgba(67,217,130,0.18)';
+      c.fillRect(bx1, chartArea.top, bx2 - bx1, chartArea.bottom - chartArea.top);
+
+      // Burst threshold line
+      const yScale = scales.y;
+      const ty = yScale.getPixelForValue(bThresh);
+      c.strokeStyle = 'rgba(67,217,130,0.50)';
+      c.lineWidth = 1;
+      c.setLineDash([4, 4]);
+      c.beginPath();
+      c.moveTo(bx1, ty);
+      c.lineTo(bx2, ty);
+      c.stroke();
+      c.setLineDash([]);
 
       c.restore();
     },
@@ -293,6 +316,15 @@ function drawChart(data) {
           borderColor: '#e63946',
           borderWidth: 1.5,
           borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: `Burst threshold ${bThresh.toFixed(3)} m/s`,
+          data: Array(vel.length).fill(bThresh),
+          borderColor: 'rgba(67,217,130,0.6)',
+          borderWidth: 1,
+          borderDash: [3, 3],
           pointRadius: 0,
           fill: false,
         },

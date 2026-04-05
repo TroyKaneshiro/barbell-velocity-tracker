@@ -69,19 +69,15 @@ def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, i
         else:
             consecutive = 0
 
-    # Concentric end: walk right from bottom until MIN_PHASE_FRAMES consecutive
-    # frames are below threshold (bar has stopped at lockout).
-    # This avoids stopping at a momentary dip in the middle of the ascent.
-    concentric_end = n
-    consecutive = 0
-    for i in range(bottom_idx + 1, n):
-        if abs(velocity[i]) < CONCENTRIC_THRESHOLD_M_S:
-            consecutive += 1
-            if consecutive >= MIN_PHASE_FRAMES:
-                concentric_end = i - MIN_PHASE_FRAMES + 1
-                break
-        else:
-            consecutive = 0
+    # Concentric end: the bar reaches its highest point after the bottom.
+    # Using position argmax is more robust than a velocity threshold, which
+    # can fail when tracking noise keeps velocity above the threshold after
+    # the bar has stopped moving at lockout.
+    post_bottom    = position[bottom_idx:]
+    lockout_local  = int(np.argmax(post_bottom))
+    concentric_end = bottom_idx + lockout_local
+    if concentric_end <= bottom_idx:
+        concentric_end = n
 
     return int(eccentric_start), int(bottom_idx), int(concentric_end)
 
@@ -154,11 +150,31 @@ def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFA
     if len(conc_pos) == 0:
         conc_pos = np.abs(conc_vel)
 
-    mcv  = float(np.mean(conc_pos))
     peak = float(np.max(conc_pos))
+    burst_threshold = BURST_FRACTION * peak
+
+    # Trim near-zero frames at reversal and lockout that drag down the mean.
+    # Only average frames where velocity >= BURST_FRACTION * peak — this
+    # matches the effective "bar is actually moving" window and aligns MCV
+    # with research measurements from dedicated VBT devices.
+    in_burst = (velocity[best_start:best_end] >= burst_threshold)
+    burst_local = np.where(in_burst)[0]
+    if len(burst_local) > 0:
+        burst_start = int(best_start + burst_local[0])
+        burst_end   = int(best_start + burst_local[-1]) + 1
+        burst       = velocity[burst_start:burst_end]
+        burst       = burst[burst > 0]
+    else:
+        burst_start = best_start
+        burst_end   = best_end
+        burst       = conc_pos
+
+    if len(burst) == 0:
+        burst = conc_pos
+    mcv = float(np.mean(burst))
 
     print(f"[velocity] eccentric_start={eccentric_start}  bottom={bottom_idx}"
-          f"  concentric=[{best_start}:{best_end}]  len={best_end - best_start}"
+          f"  concentric=[{best_start}:{best_end}]  burst=[{burst_start}:{burst_end}]"
           f"  MCV={mcv:.4f} m/s  peak={peak:.4f} m/s"
           f"  max_raw_vel={float(np.max(np.abs(velocity))):.4f} m/s")
 
@@ -169,6 +185,9 @@ def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFA
         "eccentric_start":          int(eccentric_start),
         "concentric_start":         int(best_start),
         "concentric_end":           int(best_end),
+        "burst_start":              int(burst_start),
+        "burst_end":                int(burst_end),
+        "burst_threshold":          round(burst_threshold, 4),
         "mean_concentric_velocity": round(mcv,  3),
         "peak_concentric_velocity": round(peak, 3),
         "fps":                      fps,
