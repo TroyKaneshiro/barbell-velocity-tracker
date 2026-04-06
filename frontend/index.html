@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RPE Estimator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
@@ -11,7 +14,7 @@
   <div class="page">
 
     <header class="header">
-      <h1>RPE Estimator</h1>
+      <h1>RPE <span>Estimator</span></h1>
       <p class="subtitle">Velocity-Based Training Analysis</p>
     </header>
 
@@ -141,7 +144,7 @@
         </div>
 
         <div class="card debug-card" id="debugCard" style="display:none">
-          <h2 class="chart-title">Tracker Debug Video</h2>
+          <h2 class="chart-title">Tracker Video</h2>
           <p class="hint" style="margin-bottom:.75rem">
             Green circle = plate &nbsp;·&nbsp;
             <span style="color:#ff8240">Orange dot</span> = top edge &nbsp;·&nbsp;
@@ -156,6 +159,6 @@
     </main>
   </div>
 
-  <script src="/static/app.js?v=9"></script>
+  <script src="/static/app.js?v=11"></script>
 </body>
 </html>

@@ -401,38 +401,53 @@ function drawChart(data) {
       const { ctx: c, chartArea, scales } = chart;
       if (!chartArea) return;
       const xScale = scales.x;
+      const yScale = scales.y;
 
       c.save();
 
-      // Eccentric phase (bar going down)
+      // Eccentric phase (bar going down) — slate blue tint
       const ex1 = xScale.getPixelForValue(eStart);
       const ex2 = xScale.getPixelForValue(cStart);
-      c.fillStyle = 'rgba(100,149,237,0.10)';
+      c.fillStyle = 'rgba(99,132,210,0.10)';
       c.fillRect(ex1, chartArea.top, ex2 - ex1, chartArea.bottom - chartArea.top);
 
-      // Concentric phase (bar going up)
+      // Concentric phase (bar going up) — red tint
       const cx1 = xScale.getPixelForValue(cStart);
       const cx2 = xScale.getPixelForValue(cEnd - 1);
-      c.fillStyle = 'rgba(230,57,70,0.10)';
+      c.fillStyle = 'rgba(212,0,0,0.07)';
       c.fillRect(cx1, chartArea.top, cx2 - cx1, chartArea.bottom - chartArea.top);
 
-      // Burst window — frames used for MCV (green)
+      // Burst window — frames used for MCV — green tint
       const bx1 = xScale.getPixelForValue(bStart);
       const bx2 = xScale.getPixelForValue(bEnd - 1);
-      c.fillStyle = 'rgba(67,217,130,0.18)';
+      c.fillStyle = 'rgba(22,163,74,0.10)';
       c.fillRect(bx1, chartArea.top, bx2 - bx1, chartArea.bottom - chartArea.top);
 
-      // Burst threshold line
-      const yScale = scales.y;
+      // Burst threshold dashed line
       const ty = yScale.getPixelForValue(bThresh);
-      c.strokeStyle = 'rgba(67,217,130,0.50)';
-      c.lineWidth = 1;
-      c.setLineDash([4, 4]);
+      c.strokeStyle = 'rgba(22,163,74,0.45)';
+      c.lineWidth = 1.5;
+      c.setLineDash([5, 5]);
       c.beginPath();
       c.moveTo(bx1, ty);
       c.lineTo(bx2, ty);
       c.stroke();
       c.setLineDash([]);
+
+      // Phase labels along the top
+      c.font = '700 10px Lato, system-ui, sans-serif';
+      c.textBaseline = 'top';
+      const labelY = chartArea.top + 6;
+      const midEcc  = (ex1 + ex2) / 2;
+      const midConc = (cx1 + cx2) / 2;
+      const midBurst= (bx1 + bx2) / 2;
+      c.fillStyle = 'rgba(99,132,210,0.70)';
+      c.textAlign = 'center';
+      if (ex2 - ex1 > 30) c.fillText('ECCENTRIC', midEcc, labelY);
+      c.fillStyle = 'rgba(212,0,0,0.55)';
+      if (cx2 - cx1 > 30) c.fillText('CONCENTRIC', midConc, labelY);
+      c.fillStyle = 'rgba(22,163,74,0.70)';
+      if (bx2 - bx1 > 30) c.fillText('MCV WINDOW', midBurst, labelY + 14);
 
       c.restore();
     },
@@ -447,8 +462,8 @@ function drawChart(data) {
         {
           label: 'Velocity (m/s)',
           data: vel,
-          borderColor: '#e8eaf0',
-          borderWidth: 1.5,
+          borderColor: '#1e293b',
+          borderWidth: 2,
           pointRadius: 0,
           tension: 0.3,
           fill: false,
@@ -456,8 +471,8 @@ function drawChart(data) {
         {
           label: `MCV ${mcv} m/s`,
           data: Array(vel.length).fill(mcv),
-          borderColor: '#e63946',
-          borderWidth: 1.5,
+          borderColor: '#d40000',
+          borderWidth: 2,
           borderDash: [6, 4],
           pointRadius: 0,
           fill: false,
@@ -465,16 +480,16 @@ function drawChart(data) {
         {
           label: `Burst threshold ${bThresh.toFixed(3)} m/s`,
           data: Array(vel.length).fill(bThresh),
-          borderColor: 'rgba(67,217,130,0.6)',
-          borderWidth: 1,
-          borderDash: [3, 3],
+          borderColor: 'rgba(22,163,74,0.7)',
+          borderWidth: 1.5,
+          borderDash: [3, 4],
           pointRadius: 0,
           fill: false,
         },
         {
           label: 'Zero',
           data: Array(vel.length).fill(0),
-          borderColor: '#2a2d3e',
+          borderColor: '#cbd5e1',
           borderWidth: 1,
           pointRadius: 0,
           fill: false,
@@ -488,17 +503,19 @@ function drawChart(data) {
       plugins: {
         legend: {
           labels: {
-            color: '#7a7f99',
-            font: { size: 12 },
-            boxWidth: 20,
+            color: '#64748b',
+            font: { size: 12, family: 'Lato, system-ui, sans-serif', weight: '700' },
+            boxWidth: 18,
+            padding: 16,
           },
         },
         tooltip: {
-          backgroundColor: '#1a1d27',
-          borderColor: '#2a2d3e',
+          backgroundColor: '#fff',
+          borderColor: '#cbd5e1',
           borderWidth: 1,
-          titleColor: '#e8eaf0',
-          bodyColor: '#7a7f99',
+          titleColor: '#1e293b',
+          bodyColor: '#64748b',
+          padding: 10,
           callbacks: {
             title: (items) => `t = ${items[0].label}s`,
             label: (item) => ` ${item.dataset.label.split(' ')[0]}: ${Number(item.raw).toFixed(3)} m/s`,
@@ -508,17 +525,20 @@ function drawChart(data) {
       scales: {
         x: {
           ticks: {
-            color: '#7a7f99',
+            color: '#64748b',
+            font: { size: 11 },
             maxTicksLimit: 10,
             callback: (v, i) => (i % Math.ceil(labels.length / 10) === 0 ? labels[i] + 's' : ''),
           },
-          grid: { color: '#2a2d3e' },
-          title: { display: true, text: 'Time (s)', color: '#7a7f99' },
+          grid: { color: '#e2e8f0' },
+          border: { color: '#cbd5e1' },
+          title: { display: true, text: 'Time (s)', color: '#64748b', font: { size: 12, weight: '700' } },
         },
         y: {
-          ticks: { color: '#7a7f99' },
-          grid: { color: '#2a2d3e' },
-          title: { display: true, text: 'Velocity (m/s)', color: '#7a7f99' },
+          ticks: { color: '#64748b', font: { size: 11 } },
+          grid: { color: '#e2e8f0' },
+          border: { color: '#cbd5e1' },
+          title: { display: true, text: 'Velocity (m/s)', color: '#64748b', font: { size: 12, weight: '700' } },
         },
       },
     },
