@@ -175,13 +175,25 @@ def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFA
     eccentric_start, bottom_idx, best_end = _find_rep_phases(y_smooth, velocity)
     best_start = bottom_idx  # concentric begins at the bottom
 
+    # ── 5b. Trim concentric_end with a velocity-based cutoff ──────────
+    # The position peak gives an upper bound, but after the velocity peak the bar
+    # decelerates into lockout and then velocity stays near zero. Find the first
+    # sustained drop below CONCENTRIC_THRESHOLD_M_S that occurs AFTER the velocity
+    # peak and use that as the true end of the concentric phase.
+    peak_vel_idx = best_start + int(np.argmax(velocity[best_start:best_end]))
+    consecutive_low = 0
+    for i in range(peak_vel_idx, best_end):
+        if velocity[i] < CONCENTRIC_THRESHOLD_M_S:
+            consecutive_low += 1
+            if consecutive_low >= MIN_PHASE_FRAMES:
+                best_end = max(best_start + 1, i - MIN_PHASE_FRAMES + 1)
+                break
+        else:
+            consecutive_low = 0
+    print(f"[velocity] concentric_end trimmed to {best_end} (peak_vel_idx={peak_vel_idx})")
+
     # ── 6. Compute MCV over the concentric phase ─────────────────────
-    # burst_end = concentric_end (position argmax = true lockout height).
-    # Post-lockout oscillation cannot extend burst_end because the bar cannot
-    # oscillate higher than the lockout position. Sticking points mid-lift are
-    # included correctly since the bar hasn't reached peak height yet.
-    #
-    # burst_start trims only the near-zero reversal frames at the bottom where
+    # burst_start trims the near-zero reversal frames at the bottom where
     # the bar is changing direction — these are not part of the intentional drive.
     conc_vel = velocity[best_start:best_end]
     conc_pos = conc_vel[conc_vel > 0]

@@ -89,7 +89,7 @@ class BarTracker:
 
         short = min(rw, rh)
         min_r = max(6, int(short * 0.10))
-        max_r = int(short * 0.90)
+        max_r = int(short * 0.52)
 
         raw = cv2.HoughCircles(
             blurred, cv2.HOUGH_GRADIENT, dp=1,
@@ -107,6 +107,13 @@ class BarTracker:
             # Distance from click in crop coordinates
             dist = ((cx_c - (cx_px - rx)) ** 2 + (cy_c - (cy_px - ry)) ** 2) ** 0.5
             candidates.append((cx_c + rx, cy_c + ry, r_c, dist))
+
+        if not candidates:
+            return None
+
+        # Discard circles whose centre is too far from the click — the user clicked the
+        # plate centre, so a valid detection should be near that point.
+        candidates = [c for c in candidates if c[3] <= half * 0.50]
 
         if not candidates:
             return None
