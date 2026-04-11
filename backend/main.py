@@ -147,7 +147,7 @@ async def analyze(
         )
 
         # ── Velocity ─────────────────────────────────────────────────
-        vel = calculate_velocity(tracking, plate_diameter_m=plate_diameter_m)
+        vel = calculate_velocity(tracking, plate_diameter_m=plate_diameter_m, lift_type=lift_type)
 
         # ── RPE lookup ───────────────────────────────────────────────
         mcv        = vel["mean_concentric_velocity"]

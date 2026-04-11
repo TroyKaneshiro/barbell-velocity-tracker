@@ -24,6 +24,9 @@ MAX_FRAME_JUMP     = 2.0   # bbox centre may not move more than this × plate_r 
 # ── Localised Hough around click ─────────────────────────────────────────────
 CLICK_SEARCH_FACTOR = 0.20  # search region half-size = this × min(frame_w, frame_h)
 MIN_EDGE_RATIO      = 0.18
+# ── Speed: downscale + ROI tracking ──────────────────────────────────────────
+TRACK_SCALE = 0.50   # resize each frame to this fraction before CSRT (~4× fewer pixels at 1080p)
+ROI_FACTOR  = 3.5    # ROI half-width = plate_r_scaled × ROI_FACTOR
 
 
 @dataclass
@@ -190,25 +193,65 @@ class BarTracker:
                 print(f"[tracker] no circle near click — using click point directly: "
                       f"cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
 
-        # CSRT bounding box — slightly larger than the plate for texture context
+        # ── Scaled tracking dimensions ────────────────────────────────────────
+        # CSRT runs on a downscaled + cropped region; coordinates are converted
+        # back to original pixels before being stored.
+        sw = max(int(width  * TRACK_SCALE), 320)   # never shrink below 320 px wide
+        sh = max(int(height * TRACK_SCALE), 240)
+        sx = sw / width    # actual horizontal scale (may differ from TRACK_SCALE if clamped)
+        sy = sh / height
+
+        # Plate centre and radius in scaled coords
+        cx0s      = cx0    * sx
+        cy0s      = cy0    * sy
+        plate_r_s = plate_r * (sx + sy) / 2.0
+
+        # ROI half-width (in scaled pixels) — region fed to CSRT each frame
+        roi_half  = max(int(plate_r_s * ROI_FACTOR), 60)
+        box_half_s = int(plate_r_s * 1.3)
+
+        def _roi(small_fr: np.ndarray, cx_s: float, cy_s: float):
+            """Crop a fixed-size window around (cx_s, cy_s) in the scaled frame.
+            Returns (crop, origin_x, origin_y) in scaled-frame coords."""
+            fh, fw = small_fr.shape[:2]
+            rx  = max(0, int(cx_s) - roi_half)
+            ry  = max(0, int(cy_s) - roi_half)
+            rx2 = min(fw, rx + roi_half * 2)
+            ry2 = min(fh, ry + roi_half * 2)
+            return small_fr[ry:ry2, rx:rx2], rx, ry
+
+        # Initialise CSRT on a scaled+cropped first frame
+        small_first          = cv2.resize(first_frame, (sw, sh))
+        init_crop, irx, iry  = _roi(small_first, cx0s, cy0s)
+        init_bbox_s = (
+            max(0, int(cx0s - irx) - box_half_s),
+            max(0, int(cy0s - iry) - box_half_s),
+            box_half_s * 2,
+            box_half_s * 2,
+        )
+
+        tracker = cv2.TrackerCSRT_create()
+        tracker.init(init_crop, init_bbox_s)
+        print(f"[tracker] CSRT initialised on {init_crop.shape[1]}×{init_crop.shape[0]} crop "
+              f"(frame scaled {width}×{height} → {sw}×{sh})  bbox={init_bbox_s}")
+
+        # init_bbox in original coords — used only to seed last_good_bbox for debug overlay
         box_half = int(plate_r * 1.3)
-        init_bbox = (
+        init_bbox_orig = (
             max(0, int(cx0) - box_half),
             max(0, int(cy0) - box_half),
             min(width  - max(0, int(cx0) - box_half), box_half * 2),
             min(height - max(0, int(cy0) - box_half), box_half * 2),
         )
 
-        tracker = cv2.TrackerCSRT_create()
-        tracker.init(first_frame, init_bbox)
-        print(f"[tracker] CSRT initialised with bbox {init_bbox}")
-
         dbg_writer = None
         if debug_video_path:
             dbg_writer = self._make_writer(debug_video_path, fps, width, height)
 
         positions:       list[Optional[tuple[float, float]]] = []
-        last_good_bbox   = init_bbox
+        last_good_bbox   = init_bbox_orig
+        last_cx_s        = cx0s   # running scaled-coord estimate of plate centre
+        last_cy_s        = cy0s
         consecutive_fail = 0
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -223,14 +266,19 @@ class BarTracker:
                 positions.append((cx0, cy0))
                 consecutive_fail = 0
             else:
-                ok, bbox = tracker.update(frame)
+                small            = cv2.resize(frame, (sw, sh))
+                crop, rx, ry     = _roi(small, last_cx_s, last_cy_s)
+                ok, bbox_c       = tracker.update(crop)
 
                 if ok:
-                    bx, by, bw, bh = [int(v) for v in bbox]
-                    cx_new = bx + bw / 2.0
-                    cy_new = by + bh / 2.0
+                    bx_c, by_c, bw_c, bh_c = [int(v) for v in bbox_c]
+                    # Unproject: crop → scaled frame → original frame
+                    cx_s  = bx_c + bw_c / 2.0 + rx
+                    cy_s  = by_c + bh_c / 2.0 + ry
+                    cx_new = cx_s / sx
+                    cy_new = cy_s / sy
 
-                    # Reject if bbox centre jumped too far — CSRT drifted to wrong target
+                    # Reject if centre jumped too far — CSRT drifted to wrong target
                     prev = positions[-1] if positions else None
                     if prev is not None:
                         jump = ((cx_new - prev[0]) ** 2 + (cy_new - prev[1]) ** 2) ** 0.5
@@ -239,16 +287,26 @@ class BarTracker:
 
                 if ok:
                     positions.append((cx_new, cy_new))
-                    last_good_bbox   = (bx, by, bw, bh)
+                    last_cx_s        = cx_s
+                    last_cy_s        = cy_s
+                    last_good_bbox   = (
+                        int(cx_new) - box_half,
+                        int(cy_new) - box_half,
+                        box_half * 2,
+                        box_half * 2,
+                    )
                     consecutive_fail = 0
                 else:
                     consecutive_fail += 1
                     positions.append(None)
 
-                    # Re-init CSRT from the original seed bbox so it snaps back to the plate
+                    # Re-init CSRT at the original seed position so it snaps back to the plate
                     if consecutive_fail >= MAX_CSRT_FAILURES:
+                        reinit_crop, _, _ = _roi(small, cx0s, cy0s)
                         tracker = cv2.TrackerCSRT_create()
-                        tracker.init(frame, init_bbox)
+                        tracker.init(reinit_crop, init_bbox_s)
+                        last_cx_s        = cx0s
+                        last_cy_s        = cy0s
                         consecutive_fail = 0
                         print(f"[tracker] CSRT re-init at frame {frame_idx}")
 

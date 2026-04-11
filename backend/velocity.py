@@ -44,6 +44,62 @@ def _smooth(arr: np.ndarray, polyorder: int = 3) -> np.ndarray:
     return savgol_filter(arr, window_length=window, polyorder=polyorder)
 
 
+def _find_rep_phases_deadlift(position: np.ndarray, velocity: np.ndarray) -> tuple[int, int, int]:
+    """
+    Find phases for a deadlift.
+
+    Unlike squat/bench, the bar starts on the floor and the concentric phase
+    is the initial upward pull.  Position trace: low → high (→ low between reps).
+
+    We find local MAXIMA (lockouts) and target the last one, then locate the
+    floor position immediately before that lockout as the concentric start.
+
+    Returns (setup_end, floor_idx, lockout_idx).
+    """
+    n         = len(position)
+    pos_range = float(position.max() - position.min())
+    min_prom  = max(pos_range * 0.30, 0.02)
+    min_dist  = max(10, n // 20)
+
+    # Find all local maxima (lockouts) with sufficient prominence.
+    tops, _ = find_peaks(position, prominence=min_prom, distance=min_dist)
+
+    # Keep only tops in the upper 60% of the position range so small
+    # oscillations near the floor (e.g. liftoff wiggles) are rejected.
+    height_threshold = position.min() + pos_range * 0.60
+    tops = tops[position[tops] >= height_threshold]
+
+    if len(tops) > 0:
+        top_idx = int(tops[-1])
+        print(f"[velocity] deadlift: detected {len(tops)} rep(s) — using last lockout at idx {top_idx}")
+    else:
+        top_idx = int(np.argmax(position))
+        print(f"[velocity] deadlift: no distinct reps — using global maximum at idx {top_idx}")
+
+    # floor_idx: the global minimum in the segment before the last lockout.
+    # This is where the bar was resting on the floor at the start of the last pull.
+    floor_idx = int(np.argmin(position[: top_idx + 1]))
+
+    # setup_end: walk left from floor_idx to find MIN_PHASE_FRAMES consecutive
+    # static frames — the lifter setting up, bracing, etc.
+    setup_end   = 0
+    consecutive = 0
+    for i in range(floor_idx - 1, -1, -1):
+        if abs(velocity[i]) < ECCENTRIC_THRESHOLD_M_S:
+            consecutive += 1
+            if consecutive >= MIN_PHASE_FRAMES:
+                setup_end = i
+                break
+        else:
+            consecutive = 0
+
+    lockout_idx = top_idx
+    if lockout_idx <= floor_idx:
+        lockout_idx = n
+
+    return int(setup_end), int(floor_idx), int(lockout_idx)
+
+
 def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, int, int]:
     """
     Use position to find rep phases robustly, targeting the LAST rep.
@@ -113,7 +169,11 @@ def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, i
     return int(eccentric_start), int(bottom_idx), int(concentric_end)
 
 
-def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFAULT_PLATE_DIAMETER_M) -> dict:
+def calculate_velocity(
+    tracking: TrackingResult,
+    plate_diameter_m: float = _DEFAULT_PLATE_DIAMETER_M,
+    lift_type: str = "squat",
+) -> dict:
     """
     Calculate bar velocity and identify the concentric phase.
 
@@ -171,8 +231,11 @@ def calculate_velocity(tracking: TrackingResult, plate_diameter_m: float = _DEFA
     velocity = np.gradient(y_smooth, dt)
     velocity = _smooth(velocity, polyorder=2)
 
-    # ── 5. Find phases using position minimum as the eccentric/concentric boundary
-    eccentric_start, bottom_idx, best_end = _find_rep_phases(y_smooth, velocity)
+    # ── 5. Find phases (dispatch on lift type) ───────────────────────────
+    if lift_type == "deadlift":
+        eccentric_start, bottom_idx, best_end = _find_rep_phases_deadlift(y_smooth, velocity)
+    else:
+        eccentric_start, bottom_idx, best_end = _find_rep_phases(y_smooth, velocity)
     best_start = bottom_idx  # concentric begins at the bottom
 
     # ── 5b. Trim concentric_end with a velocity-based cutoff ──────────
