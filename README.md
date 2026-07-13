@@ -55,10 +55,12 @@ Then open `http://localhost:8000` in a browser.
 
 ## Plate Detection
 
-On first frame, a Hough circle transform searches the region around the user's click to find the plate boundary. This circle sets the pixel-to-metre calibration and the initial CSRT tracker bounding box.
+On first frame, the backend now attempts object detection with a trained YOLO model to find the plate. The model output is converted to a centre and diameter, which set the pixel-to-metre calibration and the initial CSRT tracker bounding box.
+
+If the YOLO model is unavailable or fails, the app falls back to the original Hough circle search near the user's click.
 
 If the detected circle lands on an inner bezel instead of the outer rim:
-- **Right-click** on the outer edge of the plate — this sets the radius manually and overrides Hough
+- **Right-click** on the outer edge of the plate — this sets the radius manually and overrides the auto detection
 
 ---
 

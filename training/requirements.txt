@@ -1,0 +1,4 @@
+# Training-only dependencies — NOT used by backend/ at serving time.
+# Install into a separate venv (see training/README.md).
+ultralytics==8.3.40
+opencv-contrib-python-headless==4.13.0.92

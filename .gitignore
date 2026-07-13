@@ -14,3 +14,10 @@ env/
 # Temp / OS
 .DS_Store
 Thumbs.db
+
+# YOLO model weights & training artifacts (trained locally, not checked into git)
+*.onnx
+*.pt
+training/dataset/*
+!training/dataset/README.md
+training/runs/

@@ -19,7 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from tracker import BarTracker
+from tracker import BarTracker, _get_yolo_net
 from velocity import calculate_velocity
 from rpe_tables import velocity_to_rpe, projected_1rm
 from plates import PLATE_DIAMETERS, DEFAULT_PLATE, get_diameter
@@ -36,6 +36,15 @@ DEBUG_DIR.mkdir(exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.mount("/debug",  StaticFiles(directory=str(DEBUG_DIR)),    name="debug")
+
+
+@app.on_event("startup")
+async def _warm_yolo_model():
+    try:
+        _get_yolo_net()
+        print("[main] YOLO plate model loaded")
+    except FileNotFoundError as exc:
+        print(f"[main] {exc} — falling back to Hough detection until weights are added")
 
 
 @app.exception_handler(Exception)
@@ -67,7 +76,7 @@ async def detect_plate(
     click_y: float = Form(...),
 ):
     """
-    Run Hough circle detection on the first frame near the user's click.
+    Run plate detection on the first frame near the user's click.
     Returns normalised circle coordinates so the frontend can overlay them.
     """
     suffix   = Path(video.filename or "video.mp4").suffix or ".mp4"
@@ -86,7 +95,7 @@ async def detect_plate(
 
         h, w = frame.shape[:2]
         tracker = BarTracker()
-        circle  = tracker._find_circle_near_click(frame, click_x, click_y, w, h)
+        circle  = tracker._detect_plate(frame, click_x, click_y, w, h)
 
         if circle is None:
             return {"found": False}

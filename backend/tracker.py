@@ -15,7 +15,9 @@ Debug video: MJPEG .avi converted to H.264 .mp4 by main.py.
 
 import cv2
 import numpy as np
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 # ── CSRT re-init on failure ───────────────────────────────────────────────────
@@ -24,9 +26,42 @@ MAX_FRAME_JUMP     = 2.0   # bbox centre may not move more than this × plate_r 
 # ── Localised Hough around click ─────────────────────────────────────────────
 CLICK_SEARCH_FACTOR = 0.20  # search region half-size = this × min(frame_w, frame_h)
 MIN_EDGE_RATIO      = 0.18
+# ── YOLO detection ───────────────────────────────────────────────────────────
+YOLO_MODEL_PATH   = Path(os.environ.get('YOLO_MODEL_PATH', Path(__file__).parent / 'yolo_plate.onnx'))
+YOLO_INPUT_SIZE   = (640, 640)
+YOLO_CONF_THRESH  = 0.30
+YOLO_NMS_THRESH   = 0.40
 # ── Speed: downscale + ROI tracking ──────────────────────────────────────────
 TRACK_SCALE = 0.50   # resize each frame to this fraction before CSRT (~4× fewer pixels at 1080p)
 ROI_FACTOR  = 3.5    # ROI half-width = plate_r_scaled × ROI_FACTOR
+
+_yolo_net = None
+_yolo_net_missing = False
+
+
+def _get_yolo_net():
+    """Load the YOLO ONNX model once per process and cache it at module scope."""
+    global _yolo_net, _yolo_net_missing
+    if _yolo_net is not None:
+        return _yolo_net
+    if _yolo_net_missing:
+        raise FileNotFoundError(f"YOLO model not found at {YOLO_MODEL_PATH}")
+
+    if not YOLO_MODEL_PATH.exists():
+        _yolo_net_missing = True
+        raise FileNotFoundError(
+            f"YOLO model not found at {YOLO_MODEL_PATH}. "
+            "Set YOLO_MODEL_PATH or place a model at this path."
+        )
+
+    net = cv2.dnn.readNet(str(YOLO_MODEL_PATH))
+    if hasattr(cv2.dnn, 'DNN_BACKEND_OPENCV'):
+        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+    if hasattr(cv2.dnn, 'DNN_TARGET_CPU'):
+        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+
+    _yolo_net = net
+    return _yolo_net
 
 
 @dataclass
@@ -128,6 +163,141 @@ class BarTracker:
         best  = min(candidates, key=lambda c: (c[2] < max_r * 0.90, c[3]))
         return best[0], best[1], best[2]
 
+    def _letterbox(self, frame: np.ndarray) -> tuple[np.ndarray, float, int, int]:
+        input_w, input_h = YOLO_INPUT_SIZE
+        h, w = frame.shape[:2]
+        scale = min(input_w / w, input_h / h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        resized = cv2.resize(frame, (new_w, new_h))
+        letterbox = np.full((input_h, input_w, 3), 114, dtype=np.uint8)
+        dx = (input_w - new_w) // 2
+        dy = (input_h - new_h) // 2
+        letterbox[dy:dy + new_h, dx:dx + new_w] = resized
+        return letterbox, scale, dx, dy
+
+    def _detect_plate_yolo(
+        self,
+        frame: np.ndarray,
+        click_x: float,
+        click_y: float,
+        frame_w: int,
+        frame_h: int,
+    ) -> Optional[tuple[float, float, float]]:
+        """Detect the plate with a YOLO model and convert the box to a circle."""
+        net = _get_yolo_net()
+        letterbox, ratio, dx, dy = self._letterbox(frame)
+        blob = cv2.dnn.blobFromImage(letterbox, 1/255.0, YOLO_INPUT_SIZE, swapRB=True, crop=False)
+        net.setInput(blob)
+        outputs = net.forward()
+
+        if isinstance(outputs, list):
+            outputs = np.vstack([o.reshape(-1, o.shape[-1]) for o in outputs])
+        elif outputs.ndim == 3 and outputs.shape[0] == 1:
+            outputs = outputs[0]
+
+        # Ultralytics YOLOv8 ONNX exports are channels-first: (4+nc, num_anchors),
+        # e.g. (5, 8400) for a single class. Transpose to (num_anchors, 4+nc) so
+        # each row is one detection. 4+nc is always far smaller than the anchor count.
+        if outputs.ndim == 2 and outputs.shape[0] < outputs.shape[1] and outputs.shape[0] < 10:
+            outputs = outputs.T
+
+        if outputs.ndim != 2 or outputs.shape[1] < 5:
+            return None
+
+        boxes = []
+        scores = []
+
+        for row in outputs.reshape(-1, outputs.shape[-1]):
+            confidence = float(row[4])
+            if confidence < YOLO_CONF_THRESH:
+                continue
+
+            x_c, y_c, w_c, h_c = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+            if x_c <= 1 and y_c <= 1 and w_c <= 1 and h_c <= 1:
+                x_c *= YOLO_INPUT_SIZE[0]
+                y_c *= YOLO_INPUT_SIZE[1]
+                w_c *= YOLO_INPUT_SIZE[0]
+                h_c *= YOLO_INPUT_SIZE[1]
+
+            if row.shape[0] > 5:
+                class_scores = row[5:]
+                class_id = int(np.argmax(class_scores))
+                class_score = float(class_scores[class_id])
+                confidence *= class_score
+            else:
+                class_id = 0
+
+            if confidence < YOLO_CONF_THRESH:
+                continue
+
+            x1 = x_c - w_c / 2.0
+            y1 = y_c - h_c / 2.0
+            boxes.append([x1, y1, w_c, h_c])
+            scores.append(confidence)
+
+        if not boxes:
+            return None
+
+        indices = cv2.dnn.NMSBoxes(boxes, scores, YOLO_CONF_THRESH, YOLO_NMS_THRESH)
+        if len(indices) == 0:
+            return None
+
+        indices = indices.flatten() if isinstance(indices, np.ndarray) else [int(i[0]) for i in indices]
+        best_idx = indices[0]
+
+        if click_x is not None and click_y is not None:
+            click_px = click_x * frame_w
+            click_py = click_y * frame_h
+            best_score = float('-inf')
+            best_idx = None
+            for idx in indices:
+                x1, y1, w_c, h_c = boxes[idx]
+                cx = x1 + w_c / 2.0
+                cy = y1 + h_c / 2.0
+                cx_orig = (cx - dx) / ratio
+                cy_orig = (cy - dy) / ratio
+                dist = ((cx_orig - click_px) ** 2 + (cy_orig - click_py) ** 2) ** 0.5
+                score = scores[idx] - dist * 0.001
+                if best_idx is None or score > best_score:
+                    best_score = score
+                    best_idx = idx
+            if best_idx is None:
+                best_idx = indices[0]
+
+        x1, y1, w_c, h_c = boxes[best_idx]
+        cx = x1 + w_c / 2.0
+        cy = y1 + h_c / 2.0
+        cx = (cx - dx) / ratio
+        cy = (cy - dy) / ratio
+        w_orig = w_c / ratio
+        h_orig = h_c / ratio
+
+        cx = float(np.clip(cx, 0, frame_w - 1))
+        cy = float(np.clip(cy, 0, frame_h - 1))
+        r = float(max(w_orig, h_orig) / 2.0)
+        return cx, cy, r
+
+    def _detect_plate(
+        self,
+        frame: np.ndarray,
+        click_x: float,
+        click_y: float,
+        frame_w: int,
+        frame_h: int,
+    ) -> Optional[tuple[float, float, float]]:
+        """Try YOLO detection first, and fall back to Hough if necessary."""
+        try:
+            circle = self._detect_plate_yolo(frame, click_x, click_y, frame_w, frame_h)
+            if circle is not None:
+                print(f"[tracker] plate detected by YOLO: cx={circle[0]:.1f} cy={circle[1]:.1f} r={circle[2]:.1f}")
+                return circle
+        except FileNotFoundError as exc:
+            print(f"[tracker] YOLO model missing: {exc}")
+        except Exception as exc:
+            print(f"[tracker] YOLO detection failed: {exc}")
+
+        return self._find_circle_near_click(frame, click_x, click_y, frame_w, frame_h)
+
     # ── Writer helper ─────────────────────────────────────────────────────────
 
     def _make_writer(self, path: str, fps: float, w: int, h: int):
@@ -184,13 +354,13 @@ class BarTracker:
             plate_r = plate_r_norm * min(width, height)
             print(f"[tracker] manual circle: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
         else:
-            circle = self._find_circle_near_click(first_frame, click_x, click_y, width, height)
+            circle = self._detect_plate(first_frame, click_x, click_y, width, height)
             if circle is not None:
                 cx0, cy0, plate_r = circle
-                print(f"[tracker] plate found near click: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
+                print(f"[tracker] plate detected near click: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
             else:
                 plate_r = min(width, height) * CLICK_SEARCH_FACTOR * 0.5
-                print(f"[tracker] no circle near click — using click point directly: "
+                print(f"[tracker] no plate detection — using click point directly: "
                       f"cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
 
         # ── Scaled tracking dimensions ────────────────────────────────────────
