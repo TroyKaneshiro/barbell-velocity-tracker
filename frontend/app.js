@@ -31,6 +31,7 @@ let manualEdge     = null;   // { normX, normY } right-click edge point, or null
 const rpeValue  = document.getElementById('rpeValue');
 const rpeDesc   = document.getElementById('rpeDesc');
 const rpeNote   = document.getElementById('rpeNote');
+const repsValue = document.getElementById('repsValue');
 const mcvValue  = document.getElementById('mcvValue');
 const peakValue = document.getElementById('peakValue');
 const liftValue = document.getElementById('liftValue');
@@ -41,6 +42,7 @@ const rmRow      = document.getElementById('rmRow');
 const rmValue    = document.getElementById('rmValue');
 const rmUnit     = document.getElementById('rmUnit');
 const pctRow     = document.getElementById('pctRow');
+const pctLabel   = document.getElementById('pctLabel');
 const pctValue   = document.getElementById('pctValue');
 const debugCard  = document.getElementById('debugCard');
 const debugVideo = document.getElementById('debugVideo');
@@ -326,9 +328,12 @@ function showResults(data) {
   // 1RM projection
   if (data.projected_1rm != null) {
     const unit = barWeight.value ? (barWeight.placeholder.includes('kg') ? 'kg' : '') : '';
-    rmValue.textContent = data.projected_1rm;
-    rmUnit.textContent  = unit || (plateSelect.value.includes('kg') ? 'kg' : 'lb');
+    rmValue.textContent  = data.projected_1rm;
+    rmUnit.textContent   = unit || (plateSelect.value.includes('kg') ? 'kg' : 'lb');
     pctValue.textContent = (data.percent_1rm * 100).toFixed(1);
+    pctLabel.textContent = (data.num_reps ?? 1) > 1
+      ? `% of 1RM (${data.num_reps} reps · RTS table)`
+      : '% of 1RM';
     rmRow.classList.remove('hidden');
     pctRow.classList.remove('hidden');
   } else {
@@ -336,6 +341,7 @@ function showResults(data) {
     pctRow.classList.add('hidden');
   }
 
+  repsValue.textContent = data.num_reps ?? 1;
   mcvValue.textContent  = data.mean_concentric_velocity.toFixed(3);
   peakValue.textContent = data.peak_concentric_velocity.toFixed(3);
   liftValue.textContent  = data.lift_type.charAt(0).toUpperCase() + data.lift_type.slice(1);
