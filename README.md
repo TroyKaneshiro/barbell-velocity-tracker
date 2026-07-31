@@ -24,7 +24,7 @@ The backend tracks the plate frame-by-frame, converts pixel displacement to metr
 | Peak concentric velocity | Highest velocity during the concentric phase |
 | Projected 1RM | Estimated max (requires bar weight input) |
 | % of 1RM | Intensity of the set |
-| Velocity chart | Frame-by-frame velocity with eccentric / concentric / burst regions highlighted |
+| Velocity chart | Frame-by-frame velocity with eccentric / concentric (MCV window) regions highlighted |
 | Debug video | Annotated playback showing the tracker and per-frame velocity + phase label |
 
 ---

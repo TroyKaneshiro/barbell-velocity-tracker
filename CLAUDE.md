@@ -52,7 +52,7 @@ Results return immediately; the frontend polls `/debug/{filename}.mp4` until the
 |------|------|
 | [backend/main.py](backend/main.py) | FastAPI app, `/analyze` and `/detect-plate` endpoints, temp file cleanup |
 | [backend/tracker.py](backend/tracker.py) | CSRT tracking, YOLO plate detection (Hough fallback), debug video rendering |
-| [backend/velocity.py](backend/velocity.py) | Velocity calculation, phase detection, MCV burst window |
+| [backend/velocity.py](backend/velocity.py) | Velocity calculation, phase detection, MCV (full-concentric-range average) |
 | [backend/rpe_tables.py](backend/rpe_tables.py) | Helms et al. 2017 regression tables, RPE↔%1RM interpolation |
 | [backend/plates.py](backend/plates.py) | Plate diameter reference table (lb/kg sizes) for pixel calibration |
 | [frontend/app.js](frontend/app.js) | Event handlers, canvas overlay, API calls, Chart.js rendering |
@@ -67,7 +67,7 @@ Results return immediately; the frontend polls `/debug/{filename}.mp4` until the
 
 **Tracking robustness**: CSRT runs at 50% scale (`TRACK_SCALE = 0.50`), re-initialises after 5 consecutive failures or jumps > `2.0 × plate_r` per frame.
 
-**MCV burst window**: MCV is computed only over frames where velocity ≥ 20% of peak (`BURST_FRACTION = 0.20`), matching GymAware/PUSH device methodology.
+**MCV calculation**: MCV is the mean velocity over the *entire* concentric phase, matching ACV (Average Concentric Velocity) as measured by Helms et al. 2017 on a GymAware PowerTool — see [METHODOLOGY.md](METHODOLOGY.md). A prior "burst window" (frames ≥ 20% of peak) was removed after being traced back to an unverified assumption about GymAware/PUSH methodology; it inflated MCV by averaging only the fastest part of the lift.
 
 ### Frontend State (app.js globals)
 
@@ -92,7 +92,6 @@ TRACK_SCALE = 0.50          # Video downscale for CSRT tracking
 ROI_FACTOR = 3.5            # ROI half-width = plate_r × ROI_FACTOR
 MAX_CSRT_FAILURES = 5       # Re-init threshold
 MAX_FRAME_JUMP = 2.0        # Max drift per frame (× plate_r)
-BURST_FRACTION = 0.20       # MCV window lower bound
 MIN_PHASE_FRAMES = 4        # Min consecutive frames to confirm a phase
 
 YOLO_MODEL_PATH = "backend/yolo_plate.onnx"  # overridable via YOLO_MODEL_PATH env var

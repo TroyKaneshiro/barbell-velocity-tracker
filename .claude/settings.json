@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -c ' *)",
+      "Bash(node -c \"f:/RPETracker/barbell-velocity-tracker/frontend/app.js\")",
+      "Bash(ls -la \"/c/Users/ttkan/.claude/projects/f--RPETracker-barbell-velocity-tracker/memory/\")",
+      "Read(//c/Users/ttkan/.claude/projects/f--RPETracker-barbell-velocity-tracker/**)",
+      "Bash(ls -la \"/c/Users/ttkan/.claude/projects/\" 2>&1 | grep -i rpe)",
+      "Read(//c/Users/ttkan/.claude/projects//**)",
+      "Bash(ls -la \"/c/Users/ttkan/.claude/projects/f--RPETracker-barbell-velocity-tracker/\")",
+      "Read(//c/Users/ttkan/.claude/projects/f--RPETracker-barbell-velocity-tracker//**)"
+    ]
+  }
+}

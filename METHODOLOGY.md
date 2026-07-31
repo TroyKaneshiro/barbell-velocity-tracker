@@ -70,14 +70,20 @@ These tables are calibrated on competitive powerlifters. Key implications:
 
 ## Mean Concentric Velocity Calculation
 
-MCV is computed over the **burst window** — frames within the concentric phase where
-velocity ≥ 20% of the peak concentric velocity. This trims the near-zero reversal
-frames at the bottom of the squat (where the bar changes direction) and matches the
-measurement window used by dedicated VBT devices such as GymAware and PUSH.
+MCV is computed as the mean velocity over the **entire concentric phase** — matching
+ACV (Average Concentric Velocity) as measured by Helms et al. 2017 on a GymAware
+PowerTool, whose headline "Average Velocity" metric is a plain whole-ROM mean, not a
+windowed sub-selection.
 
 Concentric phase boundaries:
 - **Start:** position minimum (bottom of the rep)
 - **End:** first local position maximum after the bottom (initial lockout, before bar whip oscillation)
+
+An earlier version of this calculator averaged only a "burst window" (frames ≥ 20% of
+peak velocity), on the unverified assumption that this matched GymAware/PUSH
+methodology. It didn't — averaging just the fastest part of the lift systematically
+inflates MCV relative to what the regression table was actually calibrated against,
+under-reporting RPE. Removed in favor of the full-ROM average above.
 
 ---
 
