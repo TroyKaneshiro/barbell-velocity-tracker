@@ -193,9 +193,6 @@ async def analyze(
             "eccentric_start":           vel.get("eccentric_start", 0),
             "concentric_start":          vel["concentric_start"],
             "concentric_end":            vel["concentric_end"],
-            "burst_start":               vel["burst_start"],
-            "burst_end":                 vel["burst_end"],
-            "burst_threshold":           vel["burst_threshold"],
             # calibration
             "calibration": {
                 "fps":               vel["fps"],
@@ -228,8 +225,6 @@ def _annotate_debug_video(video_path: str, vel: dict) -> None:
     eccentric_start = vel["eccentric_start"]
     concentric_start= vel["concentric_start"]
     concentric_end  = vel["concentric_end"]
-    burst_start     = vel["burst_start"]
-    burst_end       = vel["burst_end"]
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -249,8 +244,7 @@ def _annotate_debug_video(video_path: str, vel: dict) -> None:
     PHASE_COLORS = {
         "SETUP":      (160, 160, 160),
         "ECCENTRIC":  (200, 130,  60),
-        "CONCENTRIC": ( 60,  60, 210),
-        "BURST":      ( 50, 200, 100),
+        "CONCENTRIC": ( 50, 200, 100),
         "LOCKOUT":    (160, 160, 160),
     }
 
@@ -266,8 +260,6 @@ def _annotate_debug_video(video_path: str, vel: dict) -> None:
             phase = "SETUP"
         elif frame_idx < concentric_start:
             phase = "ECCENTRIC"
-        elif burst_start <= frame_idx < burst_end:
-            phase = "BURST"
         elif frame_idx < concentric_end:
             phase = "CONCENTRIC"
         else:
@@ -276,13 +268,23 @@ def _annotate_debug_video(video_path: str, vel: dict) -> None:
         color = PHASE_COLORS[phase]
         font  = cv2.FONT_HERSHEY_SIMPLEX
 
-        # Semi-transparent bar at bottom
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (0, h - 56), (w, h), (20, 20, 20), -1)
-        cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+        # Semi-transparent box, top-right
+        box_w, box_h, margin = 280, 74, 12
+        box_x1 = w - box_w - margin
+        box_y1 = margin
+        box_x2 = w - margin
+        box_y2 = margin + box_h
 
-        cv2.putText(frame, f"v = {v:+.3f} m/s", (10, h - 32), font, 0.65, (220, 220, 220), 2)
-        cv2.putText(frame, phase,                (10, h -  8), font, 0.55, color,           2)
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (box_x1, box_y1), (box_x2, box_y2), (15, 15, 15), -1)
+        cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
+
+        vel_text = f"v = {v:+.3f} m/s"
+        (vel_w, _), _ = cv2.getTextSize(vel_text, font, 0.9, 2)
+        cv2.putText(frame, vel_text, (box_x2 - vel_w - 14, box_y1 + 34), font, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+
+        (phase_w, _), _ = cv2.getTextSize(phase, font, 0.75, 2)
+        cv2.putText(frame, phase, (box_x2 - phase_w - 14, box_y1 + 60), font, 0.75, color, 2, cv2.LINE_AA)
 
         writer.write(frame)
         frame_idx += 1

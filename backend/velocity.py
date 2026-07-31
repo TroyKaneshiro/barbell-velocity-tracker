@@ -8,9 +8,11 @@ Pipeline:
   4. Differentiate to get velocity (positive = bar moving up).
   5. Find the start of the eccentric phase — first sustained downward
      acceleration. Everything before this is ignored (static setup).
-  6. Find the concentric burst — the region around the peak upward velocity
-     that occurs after the eccentric phase ends.
-  7. Compute mean concentric velocity (MCV) and peak concentric velocity.
+  6. Find the concentric phase — from the bottom to the first lockout that
+     occurs after the eccentric phase ends.
+  7. Compute mean concentric velocity (MCV) — averaged over the whole
+     concentric phase, matching Helms et al. 2017 / GymAware ACV — and peak
+     concentric velocity.
 """
 
 import numpy as np
@@ -27,9 +29,6 @@ CONCENTRIC_THRESHOLD_M_S = 0.02  # upward
 # Must be moving in the same direction for this many consecutive frames
 # before it counts as the start of a phase
 MIN_PHASE_FRAMES = 4
-
-# Concentric burst: include frames where velocity >= this fraction of peak
-BURST_FRACTION = 0.20
 
 
 def _make_odd(n: int, minimum: int = 3) -> int:
@@ -255,30 +254,25 @@ def calculate_velocity(
             consecutive_low = 0
     print(f"[velocity] concentric_end trimmed to {best_end} (peak_vel_idx={peak_vel_idx})")
 
-    # ── 6. Compute MCV over the concentric phase ─────────────────────
-    # burst_start trims the near-zero reversal frames at the bottom where
-    # the bar is changing direction — these are not part of the intentional drive.
+    # ── 6. Compute MCV over the full concentric phase ─────────────────
+    # MCV (ACV in Helms et al. 2017, recorded on a GymAware PowerTool) is the
+    # mean velocity across the entire concentric phase — GymAware's headline
+    # "Average Velocity" metric is a plain whole-ROM mean, not a windowed
+    # sub-selection. An earlier version of this code averaged only a "burst
+    # window" (frames >= 20% of peak velocity) to trim reversal noise at the
+    # bottom, matching a misremembered/unverified claim about GymAware/PUSH
+    # methodology — that inflated MCV relative to what the regression table
+    # was actually calibrated against, systematically under-reporting RPE.
     conc_vel = velocity[best_start:best_end]
     conc_pos = conc_vel[conc_vel > 0]
     if len(conc_pos) == 0:
         conc_pos = np.abs(conc_vel)
 
     peak = float(np.max(conc_pos))
-    burst_threshold = BURST_FRACTION * peak
-
-    in_burst    = np.where(velocity[best_start:best_end] >= burst_threshold)[0]
-    burst_start = int(best_start + in_burst[0]) if len(in_burst) > 0 else best_start
-    burst_end   = best_end   # always end at lockout position
-
-    burst = velocity[burst_start:burst_end]
-    burst = burst[burst > 0]
-
-    if len(burst) == 0:
-        burst = conc_pos
-    mcv = float(np.mean(burst))
+    mcv  = float(np.mean(conc_pos))
 
     print(f"[velocity] eccentric_start={eccentric_start}  bottom={bottom_idx}"
-          f"  concentric=[{best_start}:{best_end}]  burst=[{burst_start}:{burst_end}]"
+          f"  concentric=[{best_start}:{best_end}]"
           f"  MCV={mcv:.4f} m/s  peak={peak:.4f} m/s"
           f"  max_raw_vel={float(np.max(np.abs(velocity))):.4f} m/s")
 
@@ -289,9 +283,6 @@ def calculate_velocity(
         "eccentric_start":          int(eccentric_start),
         "concentric_start":         int(best_start),
         "concentric_end":           int(best_end),
-        "burst_start":              int(burst_start),
-        "burst_end":                int(burst_end),
-        "burst_threshold":          round(burst_threshold, 4),
         "mean_concentric_velocity": round(mcv,  3),
         "peak_concentric_velocity": round(peak, 3),
         "fps":                      fps,
