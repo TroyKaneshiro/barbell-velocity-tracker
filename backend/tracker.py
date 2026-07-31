@@ -195,7 +195,7 @@ class BarTracker:
         elif outputs.ndim == 3 and outputs.shape[0] == 1:
             outputs = outputs[0]
 
-        # Ultralytics YOLOv8 ONNX exports are channels-first: (4+nc, num_anchors),
+        # Ultralytics YOLO11 ONNX exports are channels-first: (4+nc, num_anchors),
         # e.g. (5, 8400) for a single class. Transpose to (num_anchors, 4+nc) so
         # each row is one detection. 4+nc is always far smaller than the anchor count.
         if outputs.ndim == 2 and outputs.shape[0] < outputs.shape[1] and outputs.shape[0] < 10:

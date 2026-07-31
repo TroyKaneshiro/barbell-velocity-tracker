@@ -1,0 +1,13 @@
+path: dataset
+train: train/images
+val: valid/images
+
+nc: 1
+names: ['plate']
+
+roboflow:
+  workspace: troys-workspace-4zp5s
+  project: barbell-i86fn-8voka
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/troys-workspace-4zp5s/barbell-i86fn-8voka/dataset/1

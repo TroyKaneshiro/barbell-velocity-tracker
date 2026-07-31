@@ -1,9 +1,0 @@
-# Ultralytics dataset config for the single-class "plate" detector.
-# Paths are relative to this file. Populated by the Roboflow export —
-# see dataset/README.md for the expected layout.
-path: dataset
-train: images/train
-val: images/val
-
-names:
-  0: plate
