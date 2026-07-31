@@ -293,25 +293,36 @@ def _annotate_debug_video(video_path: str, vel: dict) -> None:
 
 
 def _convert_to_mp4(directory: Path, avi_filename: str) -> str:
-    """Convert MJPEG .avi → H.264 .mp4 via ffmpeg. Returns served filename."""
+    """Convert MJPEG .avi → H.264 .mp4 via ffmpeg. Returns served filename.
+
+    ffmpeg writes to a temp path and we rename into place only once it's
+    fully written — the client polls the final filename, and +faststart
+    requires ffmpeg to rewrite the file after encoding to relocate the moov
+    atom, so a partially-written file at the final path would look "ready"
+    (HEAD 200) to the poller while still being an unplayable container.
+    """
     avi_path     = directory / avi_filename
     mp4_filename = avi_filename.replace(".avi", ".mp4")
     mp4_path     = directory / mp4_filename
+    tmp_path     = directory / f"{mp4_filename}.tmp"
 
     try:
         result = subprocess.run(
             ["ffmpeg", "-y", "-i", str(avi_path),
              "-vcodec", "libx264", "-pix_fmt", "yuv420p",
-             "-movflags", "+faststart", str(mp4_path)],
+             "-movflags", "+faststart", "-f", "mp4", str(tmp_path)],
             capture_output=True, timeout=120,
         )
-        if result.returncode == 0 and mp4_path.exists():
+        if result.returncode == 0 and tmp_path.exists():
+            os.replace(tmp_path, mp4_path)
             avi_path.unlink(missing_ok=True)
             print(f"[main] debug video converted: {mp4_filename}")
             return mp4_filename
-        print(f"[main] ffmpeg failed (rc={result.returncode}), serving avi")
+        tmp_path.unlink(missing_ok=True)
+        print(f"[main] ffmpeg failed (rc={result.returncode}): {result.stderr.decode(errors='replace')[-500:]}")
         return avi_filename
     except (FileNotFoundError, subprocess.TimeoutExpired):
+        tmp_path.unlink(missing_ok=True)
         print("[main] ffmpeg not found, serving avi")
         return avi_filename
 

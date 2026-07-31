@@ -348,8 +348,11 @@ function showResults(data) {
   // Debug video — conversion runs in background; poll until the file is ready
   if (data.debug_video_url) {
     debugCard.style.display = '';
+    debugVideo.pause();
     debugVideo.innerHTML = '';
     debugVideo.removeAttribute('src');
+    debugVideo.load();  // force the element to actually clear the previous frame now,
+                         // not just whenever the next successful poll calls load() itself
 
     const pollInterval = 1500;  // ms between attempts
     const maxAttempts  = 40;    // ~60s total

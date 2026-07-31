@@ -4,8 +4,9 @@ Barbell plate tracker — user-click seeded CSRT tracking.
 Pipeline
   1. The user clicks on the weight plate in the first video frame.
      Normalised click coordinates (0-1) are passed in.
-  2. A localised Hough search around the click finds the exact plate circle.
-     If Hough finds nothing, a default box sized to the click region is used.
+  2. YOLO detects the plate and its box is converted to a circle. Falls back
+     to a localised Hough search around the click if YOLO is unavailable or
+     finds nothing.
   3. CSRT tracker is initialised on that bounding box and runs frame-by-frame.
   4. On CSRT failure the tracker is re-initialised from the last good bbox.
 
@@ -97,7 +98,7 @@ class BarTracker:
             return 0.0
         return float(edges[ys[mask], xs[mask]].astype(bool).mean())
 
-    # ── Localised Hough around click ──────────────────────────────────────────
+    # ── Localised Hough search ──────────────────────────────────────────────
 
     def _find_circle_near_click(
         self,
@@ -175,15 +176,15 @@ class BarTracker:
         letterbox[dy:dy + new_h, dx:dx + new_w] = resized
         return letterbox, scale, dx, dy
 
-    def _detect_plate_yolo(
+    def _detect_plate_yolo_box(
         self,
         frame: np.ndarray,
         click_x: float,
         click_y: float,
         frame_w: int,
         frame_h: int,
-    ) -> Optional[tuple[float, float, float]]:
-        """Detect the plate with a YOLO model and convert the box to a circle."""
+    ) -> Optional[tuple[float, float, float, float]]:
+        """Detect the plate with a YOLO model. Returns full-frame (x1, y1, w, h), or None."""
         net = _get_yolo_net()
         letterbox, ratio, dx, dy = self._letterbox(frame)
         blob = cv2.dnn.blobFromImage(letterbox, 1/255.0, YOLO_INPUT_SIZE, swapRB=True, crop=False)
@@ -272,10 +273,11 @@ class BarTracker:
         w_orig = w_c / ratio
         h_orig = h_c / ratio
 
-        cx = float(np.clip(cx, 0, frame_w - 1))
-        cy = float(np.clip(cy, 0, frame_h - 1))
-        r = float(max(w_orig, h_orig) / 2.0)
-        return cx, cy, r
+        x1_orig = float(np.clip(cx - w_orig / 2.0, 0, frame_w - 1))
+        y1_orig = float(np.clip(cy - h_orig / 2.0, 0, frame_h - 1))
+        w_orig  = float(min(w_orig, frame_w - x1_orig))
+        h_orig  = float(min(h_orig, frame_h - y1_orig))
+        return x1_orig, y1_orig, w_orig, h_orig
 
     def _detect_plate(
         self,
@@ -285,12 +287,28 @@ class BarTracker:
         frame_w: int,
         frame_h: int,
     ) -> Optional[tuple[float, float, float]]:
-        """Try YOLO detection first, and fall back to Hough if necessary."""
+        """
+        Locate the plate with YOLO and convert its box to a circle. Falls back
+        to a click-based Hough search if YOLO is unavailable or finds nothing.
+
+        A YOLO+Hough-refine hybrid (Hough search inside the YOLO box, to
+        correct for box looseness) was tried and measured against ground
+        truth on 80 validation samples: it worsened mean radius error from
+        7.9px to 14.5px (worse in 28/37 cases it fired on) — a small crop
+        around the box too often contains a plausible-but-wrong circular
+        feature (inner hole, shadow, background clutter) for Hough to
+        reliably improve on the model's already-accurate box regression.
+        Reverted; see git history if revisiting this.
+        """
         try:
-            circle = self._detect_plate_yolo(frame, click_x, click_y, frame_w, frame_h)
-            if circle is not None:
-                print(f"[tracker] plate detected by YOLO: cx={circle[0]:.1f} cy={circle[1]:.1f} r={circle[2]:.1f}")
-                return circle
+            box = self._detect_plate_yolo_box(frame, click_x, click_y, frame_w, frame_h)
+            if box is not None:
+                x1, y1, w_box, h_box = box
+                cx = x1 + w_box / 2.0
+                cy = y1 + h_box / 2.0
+                r  = max(w_box, h_box) / 2.0
+                print(f"[tracker] plate detected by YOLO: cx={cx:.1f} cy={cy:.1f} r={r:.1f}")
+                return cx, cy, r
         except FileNotFoundError as exc:
             print(f"[tracker] YOLO model missing: {exc}")
         except Exception as exc:
