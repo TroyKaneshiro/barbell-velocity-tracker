@@ -440,6 +440,16 @@ class BarTracker:
         last_good_bbox   = init_bbox_orig
         last_cx_s        = cx0s   # running scaled-coord estimate of plate centre
         last_cy_s        = cy0s
+        # Previous good position + the frame it was seen at, for constant-velocity
+        # prediction of where to *search* next frame (see below) — CSRT's search
+        # window is otherwise centred on last frame's position, which systematically
+        # lags behind fast motion (e.g. a quick eccentric descent, worse under
+        # motion blur): the true object can move farther than the tracker's
+        # regularised response confidently follows, and since next frame's search
+        # is centred on that already-short guess, the gap compounds every frame.
+        prev_cx_s            = None
+        prev_cy_s            = None
+        last_good_frame_idx  = 0
         consecutive_fail = 0
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -454,8 +464,29 @@ class BarTracker:
                 positions.append((cx0, cy0))
                 consecutive_fail = 0
             else:
-                small            = cv2.resize(frame, (sw, sh))
-                crop, rx, ry     = _roi(small, last_cx_s, last_cy_s)
+                small = cv2.resize(frame, (sw, sh))
+
+                # Predict this frame's centre via constant-velocity extrapolation
+                # from the last two *consecutive* good frames, and search there
+                # instead of at last frame's raw position — only when there's no
+                # gap (a skipped/failed frame in between makes a naive delta an
+                # unreliable per-frame velocity estimate). Capped at the same
+                # MAX_FRAME_JUMP bound used to reject implausible jumps below, so
+                # a noisy pair of positions can't send the search window somewhere
+                # senseless.
+                search_cx_s, search_cy_s = last_cx_s, last_cy_s
+                if prev_cx_s is not None and frame_idx - last_good_frame_idx == 1:
+                    dx = last_cx_s - prev_cx_s
+                    dy = last_cy_s - prev_cy_s
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    max_delta = MAX_FRAME_JUMP * plate_r_s
+                    if dist > max_delta and dist > 0:
+                        dx *= max_delta / dist
+                        dy *= max_delta / dist
+                    search_cx_s = last_cx_s + dx
+                    search_cy_s = last_cy_s + dy
+
+                crop, rx, ry     = _roi(small, search_cx_s, search_cy_s)
                 ok, bbox_c       = tracker.update(crop)
 
                 if ok:
@@ -475,8 +506,11 @@ class BarTracker:
 
                 if ok:
                     positions.append((cx_new, cy_new))
+                    prev_cx_s        = last_cx_s
+                    prev_cy_s        = last_cy_s
                     last_cx_s        = cx_s
                     last_cy_s        = cy_s
+                    last_good_frame_idx = frame_idx
                     last_good_bbox   = (
                         int(cx_new) - box_half,
                         int(cy_new) - box_half,
@@ -495,6 +529,9 @@ class BarTracker:
                         tracker.init(reinit_crop, init_bbox_s)
                         last_cx_s        = cx0s
                         last_cy_s        = cy0s
+                        prev_cx_s        = None
+                        prev_cy_s        = None
+                        last_good_frame_idx = frame_idx
                         consecutive_fail = 0
                         print(f"[tracker] CSRT re-init at frame {frame_idx}")
 

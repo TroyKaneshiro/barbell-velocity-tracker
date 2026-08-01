@@ -8,7 +8,8 @@
       "Bash(ls -la \"/c/Users/ttkan/.claude/projects/\" 2>&1 | grep -i rpe)",
       "Read(//c/Users/ttkan/.claude/projects//**)",
       "Bash(ls -la \"/c/Users/ttkan/.claude/projects/f--RPETracker-barbell-velocity-tracker/\")",
-      "Read(//c/Users/ttkan/.claude/projects/f--RPETracker-barbell-velocity-tracker//**)"
+      "Read(//c/Users/ttkan/.claude/projects/f--RPETracker-barbell-velocity-tracker//**)",
+      "Bash(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate,nb_frames,width,height -of default=noprint_wrappers=0 \"frontend/debug/debug_8ee3b15f3ccc46578f12f924485cae4b.mp4\")"
     ]
   }
 }
