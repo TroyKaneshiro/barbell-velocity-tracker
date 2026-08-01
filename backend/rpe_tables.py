@@ -36,6 +36,29 @@ Important caveats
 
 import numpy as np
 
+# ---------------------------------------------------------------------------
+# Tuchscherer / RTS table  (source: rpecalculator.com)
+# ---------------------------------------------------------------------------
+# Single-rep %1RM by RPE, extended below RPE 6 to cover high-rep sets.
+# Each additional rep is equivalent to 0.5 RPE: N reps @ RPE X lifts the
+# same %1RM as 1 rep @ RPE (X − 0.5×(N−1)).
+_RTS_SINGLE: list[tuple[float, float]] = [
+    (10.0, 1.000), (9.5, 0.978), (9.0, 0.955), (8.5, 0.939),
+    (8.0, 0.922),  (7.5, 0.907), (7.0, 0.892), (6.5, 0.878),
+    (6.0, 0.863),  (5.5, 0.850), (5.0, 0.837), (4.5, 0.824),
+    (4.0, 0.811),  (3.5, 0.799), (3.0, 0.786), (2.5, 0.774),
+    (2.0, 0.762),  (1.5, 0.751), (1.0, 0.739),
+]
+_RTS_RPES = [r for r, _ in _RTS_SINGLE]
+_RTS_PCTS = [p for _, p in _RTS_SINGLE]
+
+
+def _rts_pct(rpe: float, num_reps: int) -> float:
+    """Return %1RM (0–1) from the RTS table for given RPE and rep count."""
+    effective_rpe = rpe - 0.5 * (num_reps - 1)
+    return float(np.interp(effective_rpe, _RTS_RPES[::-1], _RTS_PCTS[::-1]))
+
+
 # Regression coefficients from Helms et al. 2017 for each lift.
 # Equation: %1RM = slope × MCV + intercept
 # Inverted for 1RM projection: 1RM = weight / (slope × MCV + intercept)
@@ -152,39 +175,49 @@ def velocity_to_rpe(lift_type: str, mean_concentric_velocity: float) -> dict:
     return {"rpe": rpe, "description": description, "note": note}
 
 
-def projected_1rm(lift_type: str, mean_concentric_velocity: float, weight: float) -> dict:
+def projected_1rm(
+    lift_type: str,
+    mean_concentric_velocity: float,
+    weight: float,
+    num_reps: int = 1,
+    rpe: float | None = None,
+) -> dict:
     """
-    Estimate 1RM from mean concentric velocity and the weight on the bar.
+    Estimate 1RM from bar weight, rep count, and RPE/velocity.
 
-    Uses the Helms et al. 2017 regression: %1RM = slope × MCV + intercept
-    Rearranged: 1RM = weight / %1RM
+    Single rep: uses the Helms et al. 2017 velocity-load regression directly.
+    Multi-rep:  uses the Tuchscherer/RTS table (rpecalculator.com) —
+                weight / %1RM(rpe, reps) — which accounts for the rep count.
 
     Args:
         lift_type: "squat", "bench", or "deadlift"
-        mean_concentric_velocity: MCV in m/s
+        mean_concentric_velocity: MCV in m/s (used for single-rep path)
         weight: weight lifted in any unit (kg or lb) — 1RM returned in same unit
+        num_reps: number of reps performed (default 1)
+        rpe: RPE of the set (required for multi-rep path)
 
     Returns:
-        {
-            "projected_1rm": float,
-            "percent_1rm":   float,   # 0–1 scale
-            "note": str | None
-        }
+        {"projected_1rm": float, "percent_1rm": float, "note": str | None}
     """
     lift_type = lift_type.lower()
     if lift_type not in REGRESSION:
         raise ValueError(f"Unknown lift type '{lift_type}'. Use: squat, bench, deadlift.")
 
-    slope, intercept = REGRESSION[lift_type]
-    pct = slope * mean_concentric_velocity + intercept
-
-    note = None
-    if pct <= 0:
-        return {"projected_1rm": None, "percent_1rm": None,
-                "note": "Velocity too high to estimate 1RM from this regression"}
-    if pct > 1.0:
-        pct  = 1.0
-        note = "Velocity at or below MVT — weight is at or above estimated 1RM"
+    if num_reps > 1 and rpe is not None:
+        # Multi-rep: RTS table lookup (rpecalculator.com)
+        pct  = _rts_pct(rpe, num_reps)
+        note = None
+    else:
+        # Single rep: velocity-load regression (Helms et al. 2017)
+        slope, intercept = REGRESSION[lift_type]
+        pct  = slope * mean_concentric_velocity + intercept
+        note = None
+        if pct <= 0:
+            return {"projected_1rm": None, "percent_1rm": None,
+                    "note": "Velocity too high to estimate 1RM from this regression"}
+        if pct > 1.0:
+            pct  = 1.0
+            note = "Velocity at or below MVT — weight is at or above estimated 1RM"
 
     one_rm = round(weight / pct, 1)
     return {

@@ -158,10 +158,14 @@ async def analyze(
         # ── Velocity ─────────────────────────────────────────────────
         vel = calculate_velocity(tracking, plate_diameter_m=plate_diameter_m, lift_type=lift_type)
 
-        # ── RPE lookup ───────────────────────────────────────────────
+        # ── RPE / e1RM lookup ────────────────────────────────────────
         mcv        = vel["mean_concentric_velocity"]
+        num_reps   = vel["num_reps"]
         rpe_result = velocity_to_rpe(lift_type, mcv)
-        rm_result  = projected_1rm(lift_type, mcv, bar_weight) if bar_weight else None
+        rm_result  = projected_1rm(
+            lift_type, mcv, bar_weight,
+            num_reps=num_reps, rpe=rpe_result["rpe"],
+        ) if bar_weight else None
 
         # ── Debug video: annotate + convert in background ─────────────
         # The mp4 filename is deterministic so the client can poll/load it
@@ -183,6 +187,7 @@ async def analyze(
             "projected_1rm":             rm_result["projected_1rm"] if rm_result else None,
             "percent_1rm":               rm_result["percent_1rm"]   if rm_result else None,
             "rm_note":                   rm_result["note"]           if rm_result else None,
+            "num_reps":                  num_reps,
             "mean_concentric_velocity":  mcv,
             "peak_concentric_velocity":  vel["peak_concentric_velocity"],
             "debug_video_url":           f"/debug/{mp4_filename}",

@@ -43,7 +43,9 @@ def _smooth(arr: np.ndarray, polyorder: int = 3) -> np.ndarray:
     return savgol_filter(arr, window_length=window, polyorder=polyorder)
 
 
-def _find_rep_phases_deadlift(position: np.ndarray, velocity: np.ndarray) -> tuple[int, int, int]:
+def _find_rep_phases_deadlift(
+    position: np.ndarray, velocity: np.ndarray
+) -> tuple[int, int, int, int]:
     """
     Find phases for a deadlift.
 
@@ -53,7 +55,7 @@ def _find_rep_phases_deadlift(position: np.ndarray, velocity: np.ndarray) -> tup
     We find local MAXIMA (lockouts) and target the last one, then locate the
     floor position immediately before that lockout as the concentric start.
 
-    Returns (setup_end, floor_idx, lockout_idx).
+    Returns (setup_end, floor_idx, lockout_idx, num_reps).
     """
     n         = len(position)
     pos_range = float(position.max() - position.min())
@@ -69,10 +71,12 @@ def _find_rep_phases_deadlift(position: np.ndarray, velocity: np.ndarray) -> tup
     tops = tops[position[tops] >= height_threshold]
 
     if len(tops) > 0:
-        top_idx = int(tops[-1])
-        print(f"[velocity] deadlift: detected {len(tops)} rep(s) — using last lockout at idx {top_idx}")
+        num_reps = len(tops)
+        top_idx  = int(tops[-1])
+        print(f"[velocity] deadlift: detected {num_reps} rep(s) — using last lockout at idx {top_idx}")
     else:
-        top_idx = int(np.argmax(position))
+        num_reps = 1
+        top_idx  = int(np.argmax(position))
         print(f"[velocity] deadlift: no distinct reps — using global maximum at idx {top_idx}")
 
     # floor_idx: the global minimum in the segment before the last lockout.
@@ -96,10 +100,12 @@ def _find_rep_phases_deadlift(position: np.ndarray, velocity: np.ndarray) -> tup
     if lockout_idx <= floor_idx:
         lockout_idx = n
 
-    return int(setup_end), int(floor_idx), int(lockout_idx)
+    return int(setup_end), int(floor_idx), int(lockout_idx), int(num_reps)
 
 
-def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, int, int]:
+def _find_rep_phases(
+    position: np.ndarray, velocity: np.ndarray
+) -> tuple[int, int, int, int]:
     """
     Use position to find rep phases robustly, targeting the LAST rep.
 
@@ -107,7 +113,7 @@ def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, i
     for RPE estimation. We find all local minima (rep bottoms) with sufficient
     prominence and use the last one.
 
-    Returns (eccentric_start, bottom_idx, concentric_end).
+    Returns (eccentric_start, bottom_idx, concentric_end, num_reps).
     """
     n = len(position)
 
@@ -128,9 +134,11 @@ def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, i
     bottoms = bottoms[position[bottoms] <= depth_threshold]
 
     if len(bottoms) > 0:
+        num_reps   = len(bottoms)
         bottom_idx = int(bottoms[-1])   # last qualifying rep
-        print(f"[velocity] detected {len(bottoms)} rep(s) — using last bottom at idx {bottom_idx}")
+        print(f"[velocity] detected {num_reps} rep(s) — using last bottom at idx {bottom_idx}")
     else:
+        num_reps   = 1
         bottom_idx = int(np.argmin(position))   # fallback: global min
         print(f"[velocity] no distinct reps detected — using global minimum at idx {bottom_idx}")
 
@@ -165,7 +173,7 @@ def _find_rep_phases(position: np.ndarray, velocity: np.ndarray) -> tuple[int, i
     if concentric_end <= bottom_idx:
         concentric_end = n
 
-    return int(eccentric_start), int(bottom_idx), int(concentric_end)
+    return int(eccentric_start), int(bottom_idx), int(concentric_end), int(num_reps)
 
 
 def calculate_velocity(
@@ -232,9 +240,9 @@ def calculate_velocity(
 
     # ── 5. Find phases (dispatch on lift type) ───────────────────────────
     if lift_type == "deadlift":
-        eccentric_start, bottom_idx, best_end = _find_rep_phases_deadlift(y_smooth, velocity)
+        eccentric_start, bottom_idx, best_end, num_reps = _find_rep_phases_deadlift(y_smooth, velocity)
     else:
-        eccentric_start, bottom_idx, best_end = _find_rep_phases(y_smooth, velocity)
+        eccentric_start, bottom_idx, best_end, num_reps = _find_rep_phases(y_smooth, velocity)
     best_start = bottom_idx  # concentric begins at the bottom
 
     # ── 5b. Trim concentric_end with a velocity-based cutoff ──────────
