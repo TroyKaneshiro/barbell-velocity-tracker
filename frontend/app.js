@@ -392,19 +392,16 @@ function drawChart(data) {
   const eStart  = data.eccentric_start;
   const cStart  = data.concentric_start;
   const cEnd    = data.concentric_end;
-  const bStart  = data.burst_start;
-  const bEnd    = data.burst_end;
-  const bThresh = data.burst_threshold;
   const mcv     = data.mean_concentric_velocity;
 
-  // Background highlights: blue = eccentric, red = concentric, green = burst (MCV window)
+  // Background highlights: blue = eccentric, green = concentric (the MCV window —
+  // MCV is averaged over the whole concentric phase, matching Helms et al. 2017 / GymAware ACV)
   const phasePlugin = {
     id: 'phaseRegions',
     beforeDraw(chart) {
       const { ctx: c, chartArea, scales } = chart;
       if (!chartArea) return;
       const xScale = scales.x;
-      const yScale = scales.y;
 
       c.save();
 
@@ -414,28 +411,11 @@ function drawChart(data) {
       c.fillStyle = 'rgba(99,132,210,0.10)';
       c.fillRect(ex1, chartArea.top, ex2 - ex1, chartArea.bottom - chartArea.top);
 
-      // Concentric phase (bar going up) — red tint
+      // Concentric phase (bar going up) — green tint, this is the MCV window
       const cx1 = xScale.getPixelForValue(cStart);
       const cx2 = xScale.getPixelForValue(cEnd - 1);
-      c.fillStyle = 'rgba(212,0,0,0.07)';
-      c.fillRect(cx1, chartArea.top, cx2 - cx1, chartArea.bottom - chartArea.top);
-
-      // Burst window — frames used for MCV — green tint
-      const bx1 = xScale.getPixelForValue(bStart);
-      const bx2 = xScale.getPixelForValue(bEnd - 1);
       c.fillStyle = 'rgba(22,163,74,0.10)';
-      c.fillRect(bx1, chartArea.top, bx2 - bx1, chartArea.bottom - chartArea.top);
-
-      // Burst threshold dashed line
-      const ty = yScale.getPixelForValue(bThresh);
-      c.strokeStyle = 'rgba(22,163,74,0.45)';
-      c.lineWidth = 1.5;
-      c.setLineDash([5, 5]);
-      c.beginPath();
-      c.moveTo(bx1, ty);
-      c.lineTo(bx2, ty);
-      c.stroke();
-      c.setLineDash([]);
+      c.fillRect(cx1, chartArea.top, cx2 - cx1, chartArea.bottom - chartArea.top);
 
       // Phase labels along the top
       c.font = '700 10px Lato, system-ui, sans-serif';
@@ -443,14 +423,14 @@ function drawChart(data) {
       const labelY = chartArea.top + 6;
       const midEcc  = (ex1 + ex2) / 2;
       const midConc = (cx1 + cx2) / 2;
-      const midBurst= (bx1 + bx2) / 2;
       c.fillStyle = 'rgba(99,132,210,0.70)';
       c.textAlign = 'center';
       if (ex2 - ex1 > 30) c.fillText('ECCENTRIC', midEcc, labelY);
-      c.fillStyle = 'rgba(212,0,0,0.55)';
-      if (cx2 - cx1 > 30) c.fillText('CONCENTRIC', midConc, labelY);
       c.fillStyle = 'rgba(22,163,74,0.70)';
-      if (bx2 - bx1 > 30) c.fillText('MCV WINDOW', midBurst, labelY + 14);
+      if (cx2 - cx1 > 30) {
+        c.fillText('CONCENTRIC', midConc, labelY);
+        c.fillText('MCV WINDOW', midConc, labelY + 14);
+      }
 
       c.restore();
     },
@@ -477,15 +457,6 @@ function drawChart(data) {
           borderColor: '#d40000',
           borderWidth: 2,
           borderDash: [6, 4],
-          pointRadius: 0,
-          fill: false,
-        },
-        {
-          label: `Burst threshold ${bThresh.toFixed(3)} m/s`,
-          data: Array(vel.length).fill(bThresh),
-          borderColor: 'rgba(22,163,74,0.7)',
-          borderWidth: 1.5,
-          borderDash: [3, 4],
           pointRadius: 0,
           fill: false,
         },
