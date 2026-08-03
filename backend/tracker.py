@@ -1,14 +1,14 @@
 """
-Barbell plate tracker — user-click seeded CSRT tracking.
+Barbell plate tracker — YOLO-seeded CSRT tracking.
 
 Pipeline
-  1. The user clicks on the weight plate in the first video frame.
-     Normalised click coordinates (0-1) are passed in.
-  2. YOLO detects the plate and its box is converted to a circle. Falls back
-     to a localised Hough search around the click if YOLO is unavailable or
-     finds nothing.
-  3. CSRT tracker is initialised on that bounding box and runs frame-by-frame.
-  4. On CSRT failure the tracker is re-initialised from the last good bbox.
+  1. YOLO detects the plate on the first video frame and its box is
+     converted to a circle — no user interaction needed. If YOLO is
+     unavailable or finds nothing, and the caller supplied a click point
+     (the frontend's manual fallback UI), a localised Hough search runs
+     around that click instead.
+  2. CSRT tracker is initialised on that bounding box and runs frame-by-frame.
+  3. On CSRT failure the tracker is re-initialised from the last good bbox.
 
 Debug video: MJPEG .avi converted to H.264 .mp4 by main.py.
   Shows: green box = CSRT bbox, crosshair = plate centre, confidence label.
@@ -179,8 +179,8 @@ class BarTracker:
     def _detect_plate_yolo_box(
         self,
         frame: np.ndarray,
-        click_x: float,
-        click_y: float,
+        click_x: Optional[float],
+        click_y: Optional[float],
         frame_w: int,
         frame_h: int,
     ) -> Optional[tuple[float, float, float, float]]:
@@ -282,14 +282,19 @@ class BarTracker:
     def _detect_plate(
         self,
         frame: np.ndarray,
-        click_x: float,
-        click_y: float,
+        click_x: Optional[float],
+        click_y: Optional[float],
         frame_w: int,
         frame_h: int,
     ) -> Optional[tuple[float, float, float]]:
         """
-        Locate the plate with YOLO and convert its box to a circle. Falls back
-        to a click-based Hough search if YOLO is unavailable or finds nothing.
+        Locate the plate with YOLO and convert its box to a circle — works
+        with no click at all (picks the highest-confidence detection).
+        If a click point is given, it's used only to disambiguate between
+        multiple candidate boxes. Falls back to a click-based Hough search
+        if YOLO is unavailable or finds nothing and a click was given;
+        with no click and no YOLO detection, returns None so the caller can
+        ask the user to click manually.
 
         A YOLO+Hough-refine hybrid (Hough search inside the YOLO box, to
         correct for box looseness) was tried and measured against ground
@@ -314,6 +319,8 @@ class BarTracker:
         except Exception as exc:
             print(f"[tracker] YOLO detection failed: {exc}")
 
+        if click_x is None or click_y is None:
+            return None
         return self._find_circle_near_click(frame, click_x, click_y, frame_w, frame_h)
 
     # ── Writer helper ─────────────────────────────────────────────────────────
@@ -333,8 +340,6 @@ class BarTracker:
         click_y: Optional[float] = None,
         plate_r_norm: Optional[float] = None,
     ) -> TrackingResult:
-        if click_x is None or click_y is None:
-            raise ValueError("Click coordinates are required. Please click on the weight plate.")
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Cannot open video: {video_path}")
@@ -349,8 +354,8 @@ class BarTracker:
         self,
         cap: cv2.VideoCapture,
         debug_video_path: Optional[str],
-        click_x: float,
-        click_y: float,
+        click_x: Optional[float],
+        click_y: Optional[float],
         plate_r_norm: Optional[float] = None,
     ) -> TrackingResult:
         fps          = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -358,28 +363,37 @@ class BarTracker:
         width        = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height       = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        # ── Read first frame and find plate circle near click ─────────────
+        # ── Read first frame and find the plate circle ─────────────────────
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         ret, first_frame = cap.read()
         if not ret:
             raise ValueError("Could not read first frame.")
 
-        cx0 = click_x * width
-        cy0 = click_y * height
-
         if plate_r_norm is not None:
-            # User manually defined the radius via right-click — use it directly
+            # Manual radius override (right-click) — requires a known centre,
+            # either from a manual click or an accepted auto-detection.
+            if click_x is None or click_y is None:
+                raise ValueError("A centre point is required together with a manual plate radius.")
+            cx0 = click_x * width
+            cy0 = click_y * height
             plate_r = plate_r_norm * min(width, height)
             print(f"[tracker] manual circle: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
         else:
             circle = self._detect_plate(first_frame, click_x, click_y, width, height)
             if circle is not None:
                 cx0, cy0, plate_r = circle
-                print(f"[tracker] plate detected near click: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
-            else:
+                print(f"[tracker] plate detected: cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
+            elif click_x is not None and click_y is not None:
+                cx0 = click_x * width
+                cy0 = click_y * height
                 plate_r = min(width, height) * CLICK_SEARCH_FACTOR * 0.5
                 print(f"[tracker] no plate detection — using click point directly: "
                       f"cx={cx0:.1f} cy={cy0:.1f} r={plate_r:.1f}")
+            else:
+                raise ValueError(
+                    "Could not automatically detect the weight plate. "
+                    "Please click on it in the preview."
+                )
 
         # ── Scaled tracking dimensions ────────────────────────────────────────
         # CSRT runs on a downscaled + cropped region; coordinates are converted
@@ -421,7 +435,7 @@ class BarTracker:
         tracker = cv2.TrackerCSRT_create()
         tracker.init(init_crop, init_bbox_s)
         print(f"[tracker] CSRT initialised on {init_crop.shape[1]}×{init_crop.shape[0]} crop "
-              f"(frame scaled {width}×{height} → {sw}×{sh})  bbox={init_bbox_s}")
+              f"(frame scaled {width}×{height} -> {sw}×{sh})  bbox={init_bbox_s}")
 
         # init_bbox in original coords — used only to seed last_good_bbox for debug overlay
         box_half = int(plate_r * 1.3)
@@ -553,9 +567,9 @@ class BarTracker:
                                 cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 2)
 
                 if frame_idx == 0:
-                    # Draw click point
+                    # Mark the seed point used to initialise tracking (auto-detected or clicked)
                     cv2.drawMarker(dbg,
-                                   (int(click_x * width), int(click_y * height)),
+                                   (int(cx0), int(cy0)),
                                    (0, 220, 255), cv2.MARKER_TILTED_CROSS, 20, 2)
                     cv2.putText(dbg, "SEED", (10, 50),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)

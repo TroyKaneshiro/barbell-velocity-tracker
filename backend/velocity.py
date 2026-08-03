@@ -293,6 +293,7 @@ def calculate_velocity(
         "concentric_end":           int(best_end),
         "mean_concentric_velocity": round(mcv,  3),
         "peak_concentric_velocity": round(peak, 3),
+        "num_reps":                 int(num_reps),
         "fps":                      fps,
         "plate_diameter_px":        tracking.plate_diameter_px,
         "m_per_px":                 round(m_per_px, 6),

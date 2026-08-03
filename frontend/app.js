@@ -105,18 +105,49 @@ function setFile(file) {
   fileChosen.classList.remove('hidden');
   hideError();
 
-  // Show preview and ask user to click the plate
+  // Show preview; plate detection runs automatically once metadata loads
   plateClick     = null;
   detectedCircle = null;
   manualEdge     = null;
-  clickStatus.textContent = 'No plate selected';
+  clickStatus.textContent = 'Detecting plate…';
   analyzeBtn.disabled = true;
   previewVideo.src = URL.createObjectURL(file);
   previewVideo.currentTime = 0;
   clickWrap.classList.remove('hidden');
 
-  // Size canvas to match video once metadata loads
-  previewVideo.addEventListener('loadedmetadata', syncCanvas, { once: true });
+  // Size canvas to match video once metadata loads, then auto-detect the plate
+  previewVideo.addEventListener('loadedmetadata', () => {
+    syncCanvas();
+    autoDetectPlate();
+  }, { once: true });
+}
+
+function currentCenterNorm() {
+  if (plateClick) return plateClick;
+  if (detectedCircle) return { normX: detectedCircle.cx_norm, normY: detectedCircle.cy_norm };
+  return null;
+}
+
+function autoDetectPlate() {
+  const fd = new FormData();
+  fd.append('video', selectedFile);
+
+  fetch('/detect-plate', { method: 'POST', body: fd })
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.found) {
+        detectedCircle = data;
+        analyzeBtn.disabled = false;
+        clickStatus.textContent = 'Plate detected automatically — right-click the outer edge to correct, or left-click to reposition';
+      } else {
+        clickStatus.textContent = 'No plate detected — click the plate in the preview to set it manually';
+      }
+      redrawCanvas();
+    })
+    .catch(() => {
+      clickStatus.textContent = 'Detection failed — click the plate in the preview to set it manually';
+      redrawCanvas();
+    });
 }
 
 function syncCanvas() {
@@ -138,9 +169,10 @@ function _drawCircle(ctx, cx, cy, r, color) {
 }
 
 function _manualRadius() {
-  if (!plateClick || !manualEdge) return null;
-  const cx = plateClick.normX * clickCanvas.width;
-  const cy = plateClick.normY * clickCanvas.height;
+  const center = currentCenterNorm();
+  if (!center || !manualEdge) return null;
+  const cx = center.normX * clickCanvas.width;
+  const cy = center.normY * clickCanvas.height;
   const ex = manualEdge.normX * clickCanvas.width;
   const ey = manualEdge.normY * clickCanvas.height;
   return Math.hypot(ex - cx, ey - cy);
@@ -149,14 +181,14 @@ function _manualRadius() {
 function redrawCanvas() {
   const ctx = clickCanvas.getContext('2d');
   ctx.clearRect(0, 0, clickCanvas.width, clickCanvas.height);
-  if (!plateClick) return;
 
   const manualR = _manualRadius();
 
   if (manualR !== null) {
-    // Manual circle defined by left-click center + right-click edge — draw in orange
-    const cx = plateClick.normX * clickCanvas.width;
-    const cy = plateClick.normY * clickCanvas.height;
+    // Manual circle defined by the current center (click or auto-detect) + right-click edge — orange
+    const center = currentCenterNorm();
+    const cx = center.normX * clickCanvas.width;
+    const cy = center.normY * clickCanvas.height;
     _drawCircle(ctx, cx, cy, manualR, '#ff8c42');
 
     // Edge point dot
@@ -165,12 +197,12 @@ function redrawCanvas() {
     ctx.arc(manualEdge.normX * clickCanvas.width, manualEdge.normY * clickCanvas.height, 5, 0, Math.PI * 2);
     ctx.fill();
   } else if (detectedCircle) {
-    // Hough-detected circle — draw in green
+    // Auto-detected circle (YOLO or Hough) — draw in green
     const cx = detectedCircle.cx_norm * clickCanvas.width;
     const cy = detectedCircle.cy_norm * clickCanvas.height;
     const r  = detectedCircle.r_norm  * Math.min(clickCanvas.width, clickCanvas.height);
     _drawCircle(ctx, cx, cy, r, '#43d982');
-  } else {
+  } else if (plateClick) {
     // Fallback: crosshair at click while detection in flight or failed
     const x = plateClick.normX * clickCanvas.width;
     const y = plateClick.normY * clickCanvas.height;
@@ -226,7 +258,7 @@ clickCanvas.addEventListener('click', (e) => {
 
 clickCanvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  if (!plateClick) return;
+  if (!currentCenterNorm()) return;
 
   const rect   = clickCanvas.getBoundingClientRect();
   const scaleX = clickCanvas.width  / rect.width;
@@ -234,11 +266,13 @@ clickCanvas.addEventListener('contextmenu', (e) => {
   const px     = (e.clientX - rect.left)  * scaleX;
   const py     = (e.clientY - rect.top)   * scaleY;
 
-  manualEdge     = { normX: px / clickCanvas.width, normY: py / clickCanvas.height };
-  detectedCircle = null;
+  manualEdge = { normX: px / clickCanvas.width, normY: py / clickCanvas.height };
+  // Keep detectedCircle (or plateClick) as-is — it's still needed as the
+  // center point for the manual radius computed in redrawCanvas/_manualRadius.
+  analyzeBtn.disabled = false;
 
   const r = _manualRadius();
-  clickStatus.textContent = `Manual circle set (r=${r.toFixed(0)}px) — right-click again to adjust`;
+  clickStatus.textContent = `Manual radius set (r=${r.toFixed(0)}px) — right-click again to adjust`;
   redrawCanvas();
 });
 
@@ -268,10 +302,11 @@ analyzeBtn.addEventListener('click', () => {
   progressLabel.textContent = 'Tracking bar & computing velocity…';
   analyzeBtn.disabled = true;
 
-  if (!plateClick) {
+  const center = currentCenterNorm();
+  if (!center) {
     progressWrap.classList.add('hidden');
     analyzeBtn.disabled = false;
-    showError('Please click on the weight plate in the preview first.');
+    showError('Could not identify the weight plate — click on it in the preview first.');
     return;
   }
 
@@ -279,8 +314,8 @@ analyzeBtn.addEventListener('click', () => {
   formData.append('video', selectedFile);
   formData.append('lift_type', liftType);
   formData.append('plate', plateSelect.value);
-  formData.append('click_x', plateClick.normX);
-  formData.append('click_y', plateClick.normY);
+  formData.append('click_x', center.normX);
+  formData.append('click_y', center.normY);
 
   const manualR = _manualRadius();
   if (manualR !== null) {

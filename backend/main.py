@@ -72,12 +72,15 @@ async def list_plates():
 @app.post("/detect-plate")
 async def detect_plate(
     video: UploadFile = File(...),
-    click_x: float = Form(...),
-    click_y: float = Form(...),
+    click_x: Optional[float] = Form(default=None),
+    click_y: Optional[float] = Form(default=None),
 ):
     """
-    Run plate detection on the first frame near the user's click.
-    Returns normalised circle coordinates so the frontend can overlay them.
+    Run plate detection on the first frame — automatic via YOLO by default.
+    If click coordinates are given (the frontend's manual fallback/correction
+    UI), they disambiguate between multiple YOLO candidates and seed a
+    localised Hough search if YOLO finds nothing. Returns normalised circle
+    coordinates so the frontend can overlay them.
     """
     suffix   = Path(video.filename or "video.mp4").suffix or ".mp4"
     tmp_path = tempfile.mktemp(suffix=suffix)
@@ -124,8 +127,8 @@ async def analyze(
     video: UploadFile = File(...),
     lift_type: str = Form(...),
     plate: str = Form(DEFAULT_PLATE),
-    click_x: float = Form(...),
-    click_y: float = Form(...),
+    click_x: Optional[float] = Form(default=None),
+    click_y: Optional[float] = Form(default=None),
     plate_r_norm: Optional[float] = Form(default=None),
     bar_weight: Optional[float] = Form(default=None),
 ):

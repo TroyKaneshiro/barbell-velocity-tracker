@@ -66,14 +66,14 @@
           </div>
         </div>
 
-        <!-- Click-to-select plate -->
+        <!-- Auto plate detection, with manual override -->
         <div class="click-wrap hidden" id="clickWrap">
-          <p class="hint" style="margin-bottom:.5rem"><strong>Left-click</strong> the centre of the plate · <strong>Right-click</strong> the outer edge to manually override the detected circle</p>
+          <p class="hint" style="margin-bottom:.5rem">The plate is detected automatically. If it looks wrong: <strong>left-click</strong> the centre to reposition, <strong>right-click</strong> the outer edge to correct the radius.</p>
           <div class="video-click-container" id="videoClickContainer">
             <video id="previewVideo" preload="metadata" style="width:100%;display:block;border-radius:8px;background:#000"></video>
             <canvas id="clickCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;border-radius:8px"></canvas>
           </div>
-          <p class="hint" id="clickStatus" style="margin-top:.4rem">No plate selected</p>
+          <p class="hint" id="clickStatus" style="margin-top:.4rem">No video selected</p>
         </div>
 
         <button class="btn-primary" id="analyzeBtn" disabled>Analyze</button>

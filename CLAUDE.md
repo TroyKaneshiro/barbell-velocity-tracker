@@ -24,7 +24,7 @@ pip install -r backend/requirements.txt
 
 ## No Automated Tests
 
-This is a single-developer research tool with no test suite. Validate changes manually via the UI: upload a side-on barbell video, click the plate to detect it, and run analysis.
+This is a single-developer research tool with no test suite. Validate changes manually via the UI: upload a side-on barbell video (the plate is detected automatically) and run analysis.
 
 ## Architecture
 
@@ -33,7 +33,9 @@ The app is a Python FastAPI backend + vanilla JS frontend. All CV and biomechani
 ### Request Pipeline
 
 ```
-POST /detect-plate  →  YOLO plate detection on first video frame (Hough fallback)
+POST /detect-plate  →  Runs automatically on upload — YOLO plate detection on first
+                        video frame (Hough fallback only if a click point is supplied,
+                        i.e. the manual-correction path)
 POST /analyze       →  Full pipeline:
     tracker.process_video()     — CSRT tracking frame-by-frame (at 50% scale)
     calculate_velocity()        — Position → velocity (Savitzky-Golay smoothed)
@@ -63,7 +65,7 @@ Results return immediately; the frontend polls `/debug/{filename}.mp4` until the
 
 **Pixel calibration**: The outer plate diameter is the reference object. `m_per_px = plate_diameter_m / plate_diameter_px`. Every velocity calculation depends on this.
 
-**Plate detection**: `_detect_plate()` tries YOLO (`_detect_plate_yolo_box()`, ONNX model via `cv2.dnn`) first, converting the detected box to a circle via `max(box_w, box_h) / 2`, falling back to the localised Hough search (`_find_circle_near_click()`) if the model weights are missing or detection fails. (A YOLO+Hough-refine hybrid was tried and measured worse on validation data — see the docstring on `_detect_plate()` for numbers — so the box is used as-is.) The YOLO model is loaded once per process via a module-level singleton (`_get_yolo_net()`) rather than per-request. Weights are expected at `backend/yolo_plate.onnx` (overridable via the `YOLO_MODEL_PATH` env var) and are gitignored — the app runs fine without them, just using Hough only.
+**Plate detection**: Runs automatically as soon as a video is uploaded — no click required. `_detect_plate()` tries YOLO (`_detect_plate_yolo_box()`, ONNX model via `cv2.dnn`) first, converting the detected box to a circle via `max(box_w, box_h) / 2`. `click_x`/`click_y` are optional on both `/detect-plate` and `/analyze`: when given, they only disambiguate between multiple YOLO candidates (nearest to click wins); when omitted, the highest-confidence box is used. Falls back to the localised Hough search (`_find_circle_near_click()`) only if YOLO finds nothing *and* a click point was supplied — with no click and no YOLO detection, `_detect_plate()` returns `None` and the frontend prompts the user to click manually (its fallback UI, shown only when auto-detection fails or the user wants to correct it). (A YOLO+Hough-refine hybrid was tried and measured worse on validation data — see the docstring on `_detect_plate()` for numbers — so the box is used as-is.) The YOLO model is loaded once per process via a module-level singleton (`_get_yolo_net()`) rather than per-request. Weights are expected at `backend/yolo_plate.onnx` (overridable via the `YOLO_MODEL_PATH` env var) and are gitignored — the app runs fine without them, just using Hough (which still needs a click) only.
 
 **Tracking robustness**: CSRT runs at 50% scale (`TRACK_SCALE = 0.50`), re-initialises after 5 consecutive failures or jumps > `2.0 × plate_r` per frame. Each frame's search window is centred on a constant-velocity prediction from the last two consecutive good frames (not just last frame's raw position) — otherwise CSRT systematically lags behind fast motion (e.g. a quick eccentric descent), since its search is centred on wherever the object was last seen and the gap compounds every frame it can't fully catch up. Prediction is skipped after any gap (failed frame or re-init) until two consecutive good frames are available again, and capped at the same `MAX_FRAME_JUMP` bound.
 
@@ -71,9 +73,10 @@ Results return immediately; the frontend polls `/debug/{filename}.mp4` until the
 
 ### Frontend State (app.js globals)
 
-- `plateClick` — `{normX, normY}` normalized (0–1) coordinates of the user's left-click
-- `detectedCircle` — `{cx_norm, cy_norm, r_norm}` from the `/detect-plate` response (YOLO or Hough)
+- `plateClick` — `{normX, normY}` normalized (0–1) coordinates of the user's left-click; `null` unless the user manually repositioned the center (auto-detection is the default, no click needed)
+- `detectedCircle` — `{cx_norm, cy_norm, r_norm}` from the `/detect-plate` response (YOLO or Hough), fired automatically on upload
 - `manualEdge` — Right-click point for manual radius override
+- `currentCenterNorm()` — `plateClick` if set, else `detectedCircle`'s center, else `null`; the single source of truth for "where is the plate" used by drawing, radius calc, and the `/analyze` payload
 - `analyzeAbortCtrl` — AbortController for cancelling in-flight `/analyze` requests
 
 ### Naming Conventions
