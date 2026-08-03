@@ -62,6 +62,8 @@ async def index():
 # ---------------------------------------------------------------------------
 
 VALID_LIFTS = {"squat", "bench", "deadlift"}
+MIN_PLATE_DIAMETER_MM = 50    # sanity bounds for a manual plate-diameter override
+MAX_PLATE_DIAMETER_MM = 600
 
 
 @app.get("/plates")
@@ -127,6 +129,7 @@ async def analyze(
     video: UploadFile = File(...),
     lift_type: str = Form(...),
     plate: str = Form(DEFAULT_PLATE),
+    plate_diameter_mm: Optional[float] = Form(default=None),
     click_x: Optional[float] = Form(default=None),
     click_y: Optional[float] = Form(default=None),
     plate_r_norm: Optional[float] = Form(default=None),
@@ -136,10 +139,24 @@ async def analyze(
     if lift_type not in VALID_LIFTS:
         raise HTTPException(400, f"lift_type must be one of: {', '.join(VALID_LIFTS)}")
 
-    try:
-        plate_diameter_m = get_diameter(plate)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
+    # An explicit plate diameter takes precedence over the weight-based lookup —
+    # useful for calibrated/competition plates or non-standard sizes that don't
+    # match the weight table's assumed diameter.
+    if plate_diameter_mm is not None:
+        if not (MIN_PLATE_DIAMETER_MM <= plate_diameter_mm <= MAX_PLATE_DIAMETER_MM):
+            raise HTTPException(
+                400,
+                f"plate_diameter_mm must be between {MIN_PLATE_DIAMETER_MM:.0f} and "
+                f"{MAX_PLATE_DIAMETER_MM:.0f} mm",
+            )
+        plate_diameter_m = plate_diameter_mm / 1000.0
+        plate_label = "Custom"
+    else:
+        try:
+            plate_diameter_m = get_diameter(plate)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        plate_label = plate
 
     suffix   = Path(video.filename or "video.mp4").suffix or ".mp4"
     tmp_path = tempfile.mktemp(suffix=suffix)
@@ -204,7 +221,7 @@ async def analyze(
             # calibration
             "calibration": {
                 "fps":               vel["fps"],
-                "plate":             plate,
+                "plate":             plate_label,
                 "plate_diameter_m":  plate_diameter_m,
                 "plate_diameter_px": vel["plate_diameter_px"],
                 "m_per_px":          vel["m_per_px"],

@@ -24,6 +24,15 @@ from typing import Optional
 # ── CSRT re-init on failure ───────────────────────────────────────────────────
 MAX_CSRT_FAILURES  = 5     # consecutive failures before re-init
 MAX_FRAME_JUMP     = 2.0   # bbox centre may not move more than this × plate_r per frame
+# ── Bottom-of-rep regrind ─────────────────────────────────────────────────────
+# Re-run YOLO once per rep at the point of furthest deflection from the last
+# anchor ("bottom" in raw pixel-y terms — largest y) to correct CSRT drift
+# before it feeds the concentric phase. See _process() for the causal detector.
+REGRIND_MIN_DISPLACEMENT = 1.5   # × plate_r_s — min rise from anchor before arming (filters setup jitter)
+REGRIND_REVERSAL_FLOOR   = 0.3   # × plate_r_s — min per-frame drop-from-max to count as "reversing"
+REGRIND_CONFIRM_FRAMES   = 4     # consecutive reversing frames required to fire (mirrors velocity.py's MIN_PHASE_FRAMES)
+REGRIND_MAX_CORRECTION   = 4.0   # × plate_r (orig-frame px) — max accepted correction; larger than
+                                  # MAX_FRAME_JUMP since this corrects multi-frame drift, not one frame's motion
 # ── Localised Hough around click ─────────────────────────────────────────────
 CLICK_SEARCH_FACTOR = 0.20  # search region half-size = this × min(frame_w, frame_h)
 MIN_EDGE_RATIO      = 0.18
@@ -446,6 +455,48 @@ class BarTracker:
             min(height - max(0, int(cy0) - box_half), box_half * 2),
         )
 
+        def _try_regrind(frame, frame_idx, small, cx_now, cy_now):
+            """Re-run YOLO at the current frame, biased toward the last-known
+            position, and correct CSRT if the result is plausible. Returns True
+            if a correction was accepted (drives the debug-overlay marker)."""
+            nonlocal tracker, last_cx_s, last_cy_s, prev_cx_s, prev_cy_s
+            nonlocal last_good_frame_idx, last_good_bbox
+
+            candidate = self._detect_plate(frame, cx_now / width, cy_now / height, width, height)
+            if candidate is None:
+                print(f"[tracker] regrind: no detection at frame {frame_idx}")
+                return False
+
+            cand_cx, cand_cy, _cand_r = candidate  # radius discarded — plate_r stays fixed at its frame-0 value
+            correction_dist = ((cand_cx - cx_now) ** 2 + (cand_cy - cy_now) ** 2) ** 0.5
+            if correction_dist > REGRIND_MAX_CORRECTION * plate_r:
+                print(f"[tracker] regrind REJECTED at frame {frame_idx}: "
+                      f"correction={correction_dist:.1f}px > "
+                      f"{REGRIND_MAX_CORRECTION}×plate_r={REGRIND_MAX_CORRECTION * plate_r:.1f}px")
+                return False
+
+            cand_cx_s, cand_cy_s = cand_cx * sx, cand_cy * sy
+            regrind_crop, rrx, rry = _roi(small, cand_cx_s, cand_cy_s)
+            regrind_bbox_s = (
+                max(0, int(cand_cx_s - rrx) - box_half_s),
+                max(0, int(cand_cy_s - rry) - box_half_s),
+                box_half_s * 2,
+                box_half_s * 2,
+            )
+            tracker = cv2.TrackerCSRT_create()
+            tracker.init(regrind_crop, regrind_bbox_s)
+
+            positions[-1]         = (cand_cx, cand_cy)   # correct this frame's stored position too
+            last_cx_s, last_cy_s  = cand_cx_s, cand_cy_s
+            prev_cx_s, prev_cy_s  = None, None            # no valid constant-velocity pair across a regrind jump
+            last_good_frame_idx   = frame_idx
+            last_good_bbox = (
+                int(cand_cx) - box_half, int(cand_cy) - box_half, box_half * 2, box_half * 2,
+            )
+            print(f"[tracker] regrind ACCEPTED at frame {frame_idx}: "
+                  f"correction={correction_dist:.1f}px cx={cand_cx:.1f} cy={cand_cy:.1f}")
+            return True
+
         dbg_writer = None
         if debug_video_path:
             dbg_writer = self._make_writer(debug_video_path, fps, width, height)
@@ -466,12 +517,21 @@ class BarTracker:
         last_good_frame_idx  = 0
         consecutive_fail = 0
 
+        # Bottom-of-rep regrind state (causal, scaled-frame y coords) — see
+        # REGRIND_* constants and _try_regrind() below.
+        regrind_ref_y_s        = cy0s   # y_s of the last seed/regrind anchor
+        regrind_watch_max_y_s  = cy0s   # running max y_s seen since the anchor
+        regrind_armed          = False
+        regrind_reversal_count = 0
+
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
         for frame_idx in range(total_frames):
             ret, frame = cap.read()
             if not ret:
                 break
+
+            regrind_fired_this_frame = False
 
             if frame_idx == 0:
                 # First frame — seeded from click
@@ -536,18 +596,56 @@ class BarTracker:
                     consecutive_fail += 1
                     positions.append(None)
 
-                    # Re-init CSRT at the original seed position so it snaps back to the plate
+                    # Re-init CSRT anchored to the last known good position — NOT the
+                    # frame-0 seed, which may be far from the plate's current location
+                    # (e.g. mid-descent) and would just fail again immediately.
                     if consecutive_fail >= MAX_CSRT_FAILURES:
-                        reinit_crop, _, _ = _roi(small, cx0s, cy0s)
+                        reinit_crop, rirx, riry = _roi(small, last_cx_s, last_cy_s)
+                        reinit_bbox_s = (
+                            max(0, int(last_cx_s - rirx) - box_half_s),
+                            max(0, int(last_cy_s - riry) - box_half_s),
+                            box_half_s * 2,
+                            box_half_s * 2,
+                        )
                         tracker = cv2.TrackerCSRT_create()
-                        tracker.init(reinit_crop, init_bbox_s)
-                        last_cx_s        = cx0s
-                        last_cy_s        = cy0s
+                        tracker.init(reinit_crop, reinit_bbox_s)
                         prev_cx_s        = None
                         prev_cy_s        = None
                         last_good_frame_idx = frame_idx
                         consecutive_fail = 0
-                        print(f"[tracker] CSRT re-init at frame {frame_idx}")
+                        print(f"[tracker] CSRT re-init at frame {frame_idx} anchored to last known "
+                              f"position cx_s={last_cx_s:.1f} cy_s={last_cy_s:.1f}")
+
+                # ── Bottom-of-rep regrind: causal detect-and-correct ────────
+                # In tracker.py's raw pixel coords (y increases downward, no sign
+                # inversion), "bottom of rep" = local max of y. Track the running
+                # max since the last anchor; once it's confirmed reversing for
+                # REGRIND_CONFIRM_FRAMES frames, re-run YOLO to correct drift
+                # before it feeds the concentric phase (see CLAUDE.md).
+                if ok:
+                    if cy_s > regrind_watch_max_y_s:
+                        regrind_watch_max_y_s  = cy_s
+                        regrind_reversal_count = 0
+                        if not regrind_armed and (
+                            regrind_watch_max_y_s - regrind_ref_y_s
+                        ) >= REGRIND_MIN_DISPLACEMENT * plate_r_s:
+                            regrind_armed = True
+                    elif regrind_armed:
+                        if (regrind_watch_max_y_s - cy_s) >= REGRIND_REVERSAL_FLOOR * plate_r_s:
+                            regrind_reversal_count += 1
+                        else:
+                            regrind_reversal_count = 0
+
+                        if regrind_reversal_count >= REGRIND_CONFIRM_FRAMES:
+                            regrind_fired_this_frame = _try_regrind(
+                                frame, frame_idx, small, cx_new, cy_new
+                            )
+                            # Re-anchor regardless of accept/reject so we don't
+                            # immediately re-fire on the same turnaround.
+                            regrind_ref_y_s        = cy_s
+                            regrind_watch_max_y_s  = cy_s
+                            regrind_armed          = False
+                            regrind_reversal_count = 0
 
             # ── Debug overlay ─────────────────────────────────────────────
             if dbg_writer is not None:
@@ -573,6 +671,12 @@ class BarTracker:
                                    (0, 220, 255), cv2.MARKER_TILTED_CROSS, 20, 2)
                     cv2.putText(dbg, "SEED", (10, 50),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
+
+                if regrind_fired_this_frame:
+                    cv2.drawMarker(dbg, (int(p[0]), int(p[1])),
+                                   (255, 0, 255), cv2.MARKER_DIAMOND, 20, 2)
+                    cv2.putText(dbg, "REGROUND", (10, 80),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 255), 2)
 
                 cv2.putText(dbg, f"f{frame_idx}", (8, 22),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 180, 180), 1)
