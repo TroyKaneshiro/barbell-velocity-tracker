@@ -1,4 +1,4 @@
-path: dataset
+path: new_dataset
 train: train/images
 val: valid/images
 

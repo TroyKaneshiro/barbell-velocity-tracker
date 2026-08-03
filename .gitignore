@@ -21,3 +21,4 @@ Thumbs.db
 training/dataset/*
 !training/dataset/README.md
 training/runs/
+training/new_dataset/*
