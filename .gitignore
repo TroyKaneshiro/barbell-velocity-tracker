@@ -22,3 +22,7 @@ training/dataset/*
 !training/dataset/README.md
 training/runs/
 training/new_dataset/*
+training/relabelled_dataset/*
+training/newdataset/*
+training/dataset4/*
+
