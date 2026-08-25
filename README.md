@@ -7,8 +7,8 @@ A velocity-based training (VBT) tool that analyses a video of a barbell lift and
 ## How It Works
 
 1. Upload a side-on video of a squat, bench press, or deadlift
-2. Select the lift type, outer plate weight, and optionally the total bar weight
-3. Left-click the plate in the preview frame to seed tracking; right-click the outer rim to manually override the detected circle if needed
+2. Select the lift type, outer plate weight, and optionally the total bar weight for 1rm estimate
+3. Right-click the outer rim to manually override the detected circle if needed
 4. Click **Analyze** — results appear in a few seconds
 
 The backend tracks the plate frame-by-frame, converts pixel displacement to metres using the known plate diameter as a calibration reference, computes bar velocity, detects the concentric phase, and maps mean concentric velocity (MCV) to RPE via the Helms et al. 2017 regression.
@@ -55,7 +55,7 @@ Then open `http://localhost:8000` in a browser.
 
 ## Plate Detection
 
-On first frame, the backend now attempts object detection with a trained YOLO model to find the plate. The model output is converted to a centre and diameter, which set the pixel-to-metre calibration and the initial CSRT tracker bounding box.
+On first frame, the backend attempts object detection with a trained YOLO model to find the plate. The model output is converted to a centre and diameter, which set the pixel-to-metre calibration and the initial CSRT tracker bounding box.
 
 If the YOLO model is unavailable or fails, the app falls back to the original Hough circle search near the user's click.
 
@@ -113,3 +113,9 @@ RPEApp/
 | GET | `/plates` | List supported plates |
 | POST | `/detect-plate` | Hough detection on first frame near click |
 | POST | `/analyze` | Full analysis — returns RPE, velocity, chart data, debug video URL |
+
+## Improvements
+
+The current pipeline relates derived velocity to a linear regression model generated during a study of competitive powerlifters. Due to differences in muscle fiber type, training experience,
+and leverages, velocity loss may correlate to RPE and projected 1rm differently for each individual person. The next step of this project will be allowing lifters to build their own profiles and 
+regresion models matching their own lifting habits based on our MCV and PCV measurements.
