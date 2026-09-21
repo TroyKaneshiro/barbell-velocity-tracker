@@ -4,6 +4,12 @@ A velocity-based training (VBT) tool that analyses a video of a barbell lift and
 
 ---
 
+# Why RPE?
+
+RPE (Rate of Percieved Excertion) is utilized in strength training to track an individual's lift intensity. When performing lifts at a high level with heavy weight, fatigue accumulates quickly, and thus must be managed. RPE provides and easy and intuitive way to determine how hard a set/lift was, which is proportional to fatigue. However, tracking RPE is a very indirect science. As it is percieved exertion, many individuals may feel an RPE 9 when in reality its an RPE 7, or vice versa. Tracking based on velocity provides a sure-fire way to tell the exact RPE of a set, allowing for more precise programming and fatigue management.
+
+---
+
 ## How It Works
 
 1. Upload a side-on video of a squat, bench press, or deadlift
