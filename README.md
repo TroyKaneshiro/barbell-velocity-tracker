@@ -111,15 +111,6 @@ RPEApp/
 └── rpe_velocity_research.txt   # Research notes and source data
 ```
 
-## API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/` | Serve frontend |
-| GET | `/plates` | List supported plates |
-| POST | `/detect-plate` | Hough detection on first frame near click |
-| POST | `/analyze` | Full analysis — returns RPE, velocity, chart data, debug video URL |
-
 ## Improvements
 
 The current pipeline relates derived velocity to a linear regression model generated during a study of competitive powerlifters. Due to differences in muscle fiber type, training experience,
